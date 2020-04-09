@@ -33,13 +33,14 @@ class Sbus:
 if __name__ =="__main__":
 
     ser = serial.Serial ("/dev/ttyS0",baudrate = 100000, bytesize = serial.SIXBITS)    #Open named port, GPIO14(pin 8)(tx), GPIO15(pin 10)(RX)
-
+    
                                                                                         #Set baud rate to 100000
     sbus = Sbus()
     startbit_mask = 0xFFF000000000000000000
 
     while(1):
-        data = ser.read(15)                                         #Read 2byte from serial port to data
+        data = ser.read(15)    
+        print(data)                                    #Read 2byte from serial port to data
         if((data & startbit_mask)>>72 == 0b100001111100):           #start byte
                 
             sbus.parse(data)
