@@ -13,7 +13,7 @@ gps ={ 'gprmc': bytearray(),
 gpss = bytearray()
 prevT = 0
 curT = 0
-ser = serial.serialwin32.Serial(port = "COM4")                   # 라즈베리파이 포트로 바꿔야됨
+ser = serial.serialwin32.Serial(port = "COM5")                   # 라즈베리파이 포트로 바꿔야됨
 
 while True:
     '''
@@ -47,8 +47,16 @@ while True:
 
     if tdiff > 100000000:                     #0.1초보다 길면 그만 더하고 지금까지 받은 것 출력 그리고 gpss (bytearray) 리셋
         str_gps = gpss.decode('utf-8')
-        print(tdiff)
-        print(str_gps)
+        str_gps2 = str_gps.split("\n")
+        try:
+            str_gpgga = str_gps2[2].split(",")
+            latitude = str_gpgga[2]
+            longtude = str_gpgga[4]
+            print(tdiff)
+            print(str_gpgga)
+            print("latitude = ",latitude,", longitue = ", longtude)
+        except:
+            pass
         gpss.clear()
 
 
