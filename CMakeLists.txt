@@ -52,6 +52,7 @@ find_package(catkin REQUIRED COMPONENTS
 add_message_files(
   FILES
   Example.msg
+  gps_data.msg
 #   Message2.msg
 )
 
