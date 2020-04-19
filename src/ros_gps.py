@@ -36,8 +36,8 @@ class gps:
                 pass
             gpss.clear()
 		        '''
-                self.altitude = 0
-                self.gps_time = 0
+                self.altitude = self.str_gpgga[9]
+                self.gps_time = self.str_gpgga[1]
                 self.gps_data_msg.latitude = self.latitude
                 self.gps_data_msg.altitude = self.altitude
                 self.gps_data_msg.longtitude = self.longtitude
