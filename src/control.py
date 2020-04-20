@@ -18,31 +18,28 @@ quaternion to matrix
 2*q1*q2 + 2*q3*q0 , 1 - 2*q1**2 - 2*q3**2 , 2*q3*q2 - 2*q1*q0
 2*q1*q3 - 2*q2*q0 , 2*q2*q3 + 2*q1*q0 , 1-2*q1**2 -2*q2**2
 """
+def normalization(v1, v2, v3):
+        #making the vector size 1
+        norm = math.sqrt(v1 ** 2 + v2 ** 2 + v3 ** 2)
+        v1 = v1 / norm
+        v2 = v2 / norm
+        v3=  v3 / norm
+        return v1, v2, v3
+
+def calculating_rpy(q0,q1,q2,q3):
+    # calculating quaternion -> roll pitch yaw
+    # euler angle is based on x-y-z order
+    quaternion_norm = math.sqrt(q0**2 + q1**2 + q2**2 + q3**2)
+    q0 = q0 / quaternion_norm
+    q1 = q1 / quaternion_norm
+    q2 = q2 / quaternion_norm
+    q3 = q3 / quaternion_norm
+    roll = math.atan2((-2*q3*q2 + 2*q1*q0),(1-2*q1**2 -2*q2**2))
+    pitch = math.asin(2*q1*q3 + 2*q2*q0)
+    yaw = math.atan2((-2*q1*q2 + 2*q3*q0),(1-2*q2**2 - 2*q3**2))
+    return roll, pitch, yaw
 
 class control:
-    def calculating_rpy(self,q0,q1,q2,q3):
-        # calculating quaternion -> roll pitch yaw
-        # euler angle is based on x-y-z order
-        quaternion_norm = math.sqrt(q0**2 + q1**2 + q2**2 + q3**2)
-        q0 = q0 / quaternion_norm
-        q1 = q1 / quaternion_norm
-        q2 = q2 / quaternion_norm
-        q3 = q3 / quaternion_norm
-        roll = math.atan2((-2*q3*q2 + 2*q1*q0),(1-2*q1**2 -2*q2**2))
-        pitch = math.asin(2*q1*q3 + 2*q2*q0)
-        yaw = math.atan2((-2*q1*q2 + 2*q3*q0),(1-2*q2**2 - 2*q3**2))
-        return roll, pitch, yaw
-
-    def motion_cb(self, msg):
-        self.mot_msg = msg
-        self.motion_time = self.mot_msg.header.stamp.secs + self.mot_msg.header.stamp.nsecs * 10 ** (-9)
-        self.motion_quat_x = self.mot_msg.pose.orientation.x
-        self.motion_quat_y = self.mot_msg.pose.orientation.y
-        self.motion_quat_z = self.mot_msg.pose.orientation.z
-        self.motion_quat_w = self.mot_msg.pose.orientation.w
-        self.motion_x = self.mot_msg.pose.position.x
-        self.motion_y = self.mot_msg.pose.position.y
-        self.motion_z = self.mot_msg.pose.position.z
 
     def ppm_cb(self, msg):
         self.ppm_input_msg = msg
@@ -55,12 +52,18 @@ class control:
         self.ch7 = int(self.ppm_input_msg.channel_7)
         self.ch8 = int(self.ppm_input_msg.channel_8)
 
+    def gps_cb(self, msg):
+        self.gps_msg = msg
+        self.latitude = self.gps_msg.latitude
+        self.longtitude = self.gps_msg.longtitude
+        self.altitude = self.gps_msg.altitude
+        self.in_out = self.gps_msg.range
+
     def __init__(self, x, y ,z):
-        # reference point
-        self.target_x = x
-        self.target_y = y
-        self.target_z = z
-        self.target_yaw = 0
+        self.latitude = 0
+        self.longtitude = 0
+        self.altitude = 0
+        self.in_out = 0
 
         self.kp = 0.0
         self.ki = 0.0
@@ -75,18 +78,7 @@ class control:
         self.ch6 = 1000
         self.ch7 = 1000
         self.ch8 = 1000
-        self.motion_x = 0.0
-        self.motion_y = 0.0
-        self.motion_z = 0.0
-        self.motion_quat_x = 0.0
-        self.motion_quat_y = 0.0
-        self.motion_quat_z = 0.0
-        self.motion_quat_w = 0.0
-        self.motion_time = 0.0
-        self.motion_time_prev = 0.0
-        self.motion_roll = 0.0
-        self.motion_pitch = 0.0
-        self.motion_yaw = 0.0
+        self.control_ch1, self.control_ch2, self.control_ch3, self.control_ch4 = 0.0, 0.0, 0.0, 0.0
         self.error_x,self.error_y, self.error_z = 0.0, 0.0, 0.0
         self.prev_error_x, self.prev_error_y, self.prev_error_z = 0.0, 0.0, 0.0
         self.error_roll, self.error_pitch, self.error_yaw = 0.0, 0.0, 0.0
@@ -94,9 +86,24 @@ class control:
         self.x_I, self.y_I, self.z_I = 0.0, 0.0, 0.0
         self.roll_I, self.pitch_I, self.yaw_I = 0.0, 0.0 , 0.0
         self.roll, self.pitch, self.yaw, self.throttle = 0.0, 0.0, 0.0, 0.0
+
+        # target position put here
+        ###########################################################################
+        self.target_latitude_min = 0
+        self.target_latitude_max = 0
+        self.target_longtitude_min = 0
+        self.target_longtitude_max = 0
+        #############################################################################
+
+        self.target_coordinate_lat = (self.target_latitude_max + self.target_latitude_max)/2
+        self.target_coordinate_long = (self.target_longtitude_max + self.target_longtitude_min)/2
+
         # Subscriber created
-        #rospy.Subscriber("/vrpn_client_node/quad_imu_2/pose", PoseStamped, self.motion_cb)
         rospy.Subscriber("/input_ppm", ppm_msg, self.ppm_cb)
+        rospy.Subscriber("/gps_data", gps_data, self.gps_cb)
+
+        #rospy.Subscriber("/pose_covariance",PoseWithCovarianceStamped, self.kalman_cb)
+
         self.controling_pub = rospy.Publisher("/control_signal", ppm_msg, queue_size=1)
 
     def calculating_desired(self,x_des,y_des,z_des):
@@ -133,30 +140,20 @@ class control:
         #self.pid_ch4 = 0.0
         self.channel_msg = ppm_msg()
         #self.channel_msg.header.stamp = time.time()
-        if self.ch5 > 1350:
-            self.channel_msg.channel_1 = self.ch1 + 50
-            self.channel_msg.channel_2 = self.ch2 + 50
-            self.channel_msg.channel_3 = self.ch3 + 50
-            self.channel_msg.channel_4 = self.ch4 + 50
-            self.channel_msg.channel_5 = self.ch5
-            self.channel_msg.channel_6 = self.ch6
-            self.channel_msg.channel_7 = self.ch7
-            self.channel_msg.channel_8 = self.ch8
-        elif self.ch5 < 700 :
-            self.channel_msg.channel_1 = self.ch1 - 50
-            self.channel_msg.channel_2 = self.ch2 - 50
-            self.channel_msg.channel_3 = self.ch3 - 50
-            self.channel_msg.channel_4 = self.ch4 - 50
-            self.channel_msg.channel_5 = self.ch5
-            self.channel_msg.channel_6 = self.ch6
-            self.channel_msg.channel_7 = self.ch7
-            self.channel_msg.channel_8 = self.ch8
-
-        else :
+        if self.in_out == "in":
             self.channel_msg.channel_1 = self.ch1
             self.channel_msg.channel_2 = self.ch2
             self.channel_msg.channel_3 = self.ch3
-            self.channel_msg.channel_4 = self.ch4
+            self.channel_msg.channel_4 = self.ch4 
+            self.channel_msg.channel_5 = self.ch5
+            self.channel_msg.channel_6 = self.ch6
+            self.channel_msg.channel_7 = self.ch7
+            self.channel_msg.channel_8 = self.ch8
+        else :
+            self.channel_msg.channel_1 = self.control_ch1
+            self.channel_msg.channel_2 = self.control_ch2
+            self.channel_msg.channel_3 = self.control_ch3
+            self.channel_msg.channel_4 = self.control_ch4
             self.channel_msg.channel_5 = self.ch5
             self.channel_msg.channel_6 = self.ch6
             self.channel_msg.channel_7 = self.ch7
