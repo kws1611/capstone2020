@@ -13,9 +13,21 @@ class gps:
         self.curT = 0
         self.ser = serial.serialwin32.Serial(port = "COM5")  
         self.gps_pub = rospy.Publisher("/gps_data", gps_data ,queue_size=1) 
+
+        self.longtitude, self.latitude = 0 , 0
+        ######################
+        #target range set
+        ##################
+        
+        self.target_latitude_min = 0
+        self.target_latitude_max = 0
+        self.target_longtitude_min = 0
+        self.target_longtitude_max = 0
+
     def gps_reading(self):
         self.data = self.ser.read()                      
-        self.gpss = self.gpss + self.data                     
+        self.gpss = self.gpss + self.data    
+                         
         self.curT = time.time_ns()
         self.tdiff = self.curT-self.prevT                     
         self.prevT = self.curT
@@ -42,7 +54,17 @@ class gps:
                 self.gps_data_msg.altitude = self.altitude
                 self.gps_data_msg.longtitude = self.longtitude
                 self.gps_data.time = self.gps_time
+                self.gps_data.range = self.range_check()
                 self.gps_pub.publish(self.gps_data_msg)
+
+    def range_check(self):
+        if (self.longtitude < self.target_latitude_max) and (self.longtitude > self.target_latitude_min):
+            if (self.latitude < self.target_latitude_max) and (self.latitude > self.target_latitude_min):
+                return str("in")
+            else:
+                return str("out")
+        else :
+            return str("out")
 
 if __name__ == "__main__":
     rospy.init_node("GPS_reading", anonymous = True)
