@@ -23,7 +23,7 @@ class PWM_read:
         self.ch_final = [0,0,0,0,0,0,0,0,0]
         self.rate = rospy.Rate(50)
         self.first_switch = True
-
+        
         self._cb = pi.callback(gpio, pigpio.EITHER_EDGE, self._cbf)
         self.input_pub = rospy.Publisher("/input_ppm",ppm_msg,queue_size=1)
 
