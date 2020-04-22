@@ -1,0 +1,39 @@
+#define BUZZER_PIN 11
+void setup() {
+  Serial.begin(9600);
+pinMode(A0, INPUT_PULLUP); //A0에 조도센서를 연결해서 아날로그신호 받음
+pinMode(BUZZER_PIN, OUTPUT);
+}
+void loop() {
+int value=analogRead(A0);//A0단자에서 신호 받음
+Serial.println(value);
+delay(100);
+if(value==1000){
+tone(BUZZER_PIN, 262); // 도
+delay(500);
+tone(BUZZER_PIN, 277); // 도#
+delay(500);
+tone(BUZZER_PIN, 294); //레
+delay(500);
+tone(BUZZER_PIN, 311); //레#
+delay(500);
+tone(BUZZER_PIN, 330); //미
+delay(500);
+tone(BUZZER_PIN, 349); //파
+delay(500);
+
+tone(BUZZER_PIN, 370); // 파#
+delay(500);
+tone(BUZZER_PIN, 392); // 솔
+delay(500);
+tone(BUZZER_PIN, 415); // 솔#
+delay(500);
+tone(BUZZER_PIN, 440); //라
+delay(500);
+tone(BUZZER_PIN, 466); // 라#
+delay(500);
+tone(BUZZER_PIN, 494); // 시
+delay(500);
+tone(BUZZER_PIN, 523); //도(옥타브5)
+delay(500);} //조도센서주변에 빛을 막으면 부저울림, 특정 아날로그신호(value) 일때 부저가 울리게 할 수도 있음
+}
