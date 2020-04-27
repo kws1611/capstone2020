@@ -74,7 +74,7 @@ class control:
 
     def quat_to_matrix(w,x,y,z):
         # changing quaternion to rotation matrix
-        # 
+        return matrix([[(1-2*y**2-2*z**2), (2*x*y + 2*w*z), (2*x*z - 2*w*y)],[(2*x*y - 2*w*z), (1-2*x**2-2*z**2),(2*y*z + 2*w*x)],[(2*x*z + 2*w*y),(2*y*z - 2*w*x),(1-2*x**2 -2*y**2)]])
 
     def __init__(self, x, y ,z):
         self.latitude = 0
@@ -137,9 +137,9 @@ class control:
         self.x_I += self.error_x * self.dt
         self.y_I += self.error_y * self.dt
         self.z_I += self.error_z * self.dt
-         if time.time() - self.I_time > 3 :
-             self.x_I, self.y_I, self.z_I = 0, 0, 0
-             self.I_time = time.time()
+        if (time.time() - self.I_time) > 3 :
+            self.x_I, self.y_I, self.z_I = 0, 0, 0
+            self.I_time = time.time()
 
         self.prev_error_x, self.prev_error_y, self.prev_error_z = self.error_x, self.error_y, self.error_z
         self.phi_desired ,self.theta_desired, self.throttle = self.calculating_desired(self.x_desired_accel,self.y_desired_accel,self.z_desired_accel)
@@ -153,20 +153,17 @@ class control:
             self.channel_msg.channel_2 = self.ch2
             self.channel_msg.channel_3 = self.ch3
             self.channel_msg.channel_4 = self.ch4 
-            self.channel_msg.channel_5 = self.ch5
-            self.channel_msg.channel_6 = self.ch6
-            self.channel_msg.channel_7 = self.ch7
-            self.channel_msg.channel_8 = self.ch8
+
         else :
             self.calculating()
             self.channel_msg.channel_1 = self.control_ch1
             self.channel_msg.channel_2 = self.control_ch2
             self.channel_msg.channel_3 = self.control_ch3
             self.channel_msg.channel_4 = self.control_ch4
-            self.channel_msg.channel_5 = self.ch5
-            self.channel_msg.channel_6 = self.ch6
-            self.channel_msg.channel_7 = self.ch7
-            self.channel_msg.channel_8 = self.ch8
+        self.channel_msg.channel_5 = self.ch5
+        self.channel_msg.channel_6 = self.ch6
+        self.channel_msg.channel_7 = self.ch7
+        self.channel_msg.channel_8 = self.ch8
         self.controling_pub.publish(self.channel_msg)
 
 if __name__ == "__main__":
