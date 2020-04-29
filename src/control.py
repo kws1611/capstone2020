@@ -80,7 +80,7 @@ class control:
         self.latitude = 0
         self.longtitude = 0
         self.altitude = 0
-        self.in_out = 0
+        self.in_out = ""
 
         self.kp = 0.0
         self.ki = 0.0
@@ -105,12 +105,17 @@ class control:
         self.roll, self.pitch, self.yaw, self.throttle = 0.0, 0.0, 0.0, 0.0
         self.I_time = time.time()
 
+        self.back_up_switch = True
+        self.back_switch = True
+        self.back_up_ch1, self.back_up_ch2, self.back_up_ch3, self.back_up_ch4 = 0.0, 0.0, 0.0, 0.0
+
         # target position put here
         ###########################################################################
         self.target_latitude_min = 0
         self.target_latitude_max = 0
         self.target_longtitude_min = 0
         self.target_longtitude_max = 0
+        self.target_altitude = 0
         #############################################################################
 
         self.target_coordinate_lat = (self.target_latitude_max + self.target_latitude_max)/2
@@ -123,6 +128,21 @@ class control:
 
         self.controling_pub = rospy.Publisher("/control_signal", ppm_msg, queue_size=1)
 
+    def checking_state(self):
+        if self.back_switch:
+            if self.in_out == "out":
+                self.back_up_switch = True
+
+        if self.back_up_switch:
+            self.back_up_ch1 = self.ch1
+            self.back_up_ch2 = self.ch2
+            self.back_up_ch3 = self.ch3
+            self.back_up_ch4 = self.ch4
+            self.back_up_switch = False
+
+        if self.in_out =="in":
+            self.back_switch = True
+
     def calculating_desired(self,x_des,y_des,z_des):
         phi_desired = atan2(-y_des, z_des)
         theta_desired = atan2(x_des, -y_des/sin(phi_desired))
@@ -130,15 +150,23 @@ class control:
         return phi_desired, theta_desired, throttle
 
     def desired_accelation(self):
-        self.des_global_x = self.target_x - self.longtitude
-        self.des_global_y = self.target_y - self.latitude
-        self.des_global_z = self.target_z - self.altitude
+        self.des_global_x = self.target_coordinate_long - self.longtitude
+        self.des_global_y = self.target_coordinate_lat - self.latitude
+        self.des_global_z = self.target_altitude - self.altitude
+
+        matrix([[self.des_body_x],[self.des_body_y],[self.des_body_z]]) = self.quat_to_matrix(self.quat_w,self.quat_x,self.quat_y,self.quat_z)*matrix([[self.des_global_x],[self.des_global_y],[self.des_global_z]])
+        
+        self.norm_body_x, self.norm_body_y, self.norm_body_z = normalization(self.des_body_x,self.des_body_y,self.des_body_z)
+
+        self.x_tilt_value = -(self.norm_body_y)
+        self.y_tilt_value = +(self.norm_body_x)
+        self.throttle_value = self.norm_body_z
 
         self.x_I += self.error_x * self.dt
         self.y_I += self.error_y * self.dt
         self.z_I += self.error_z * self.dt
         if (time.time() - self.I_time) > 3 :
-            self.x_I, self.y_I, self.z_I = 0, 0, 0
+            self.x_I, self.y_I, self.z_I = 0.0, 0.0, 0.0
             self.I_time = time.time()
 
         self.prev_error_x, self.prev_error_y, self.prev_error_z = self.error_x, self.error_y, self.error_z
