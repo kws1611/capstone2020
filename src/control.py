@@ -22,10 +22,10 @@ quaternion to matrix
 def normalization(v1, v2, v3):
         #making the vector size 1
         norm = math.sqrt(v1 ** 2 + v2 ** 2 + v3 ** 2)
-        v1 = v1 / norm
-        v2 = v2 / norm
-        v3=  v3 / norm
-        return v1, v2, v3
+        out_1 = v1 / (v1**2 + v2**2)
+        out_2 = v2 / (v1**2 + v2**2)
+        out_3=  v3 / norm
+        return out_1, out_2, out_3
 
 def calculating_rpy(q0,q1,q2,q3):
     # calculating quaternion -> roll pitch yaw
@@ -81,6 +81,8 @@ class control:
         self.longtitude = 0
         self.altitude = 0
         self.in_out = ""
+        ### has to be added
+        self. dist_sq = 0
 
         self.kp = 0.0
         self.ki = 0.0
@@ -104,6 +106,8 @@ class control:
         self.roll_I, self.pitch_I, self.yaw_I = 0.0, 0.0 , 0.0
         self.roll, self.pitch, self.yaw, self.throttle = 0.0, 0.0, 0.0, 0.0
         self.I_time = time.time()
+        self.des_global_x, self.des_global_y, self.des_global_z = 0.0, 0.0, 0.0
+        self.des_body_x, self.des_body_y, self.des_body_z = 0.0, 0.0, 0.0
 
         self.back_up_switch = True
         self.back_switch = True
@@ -142,26 +146,59 @@ class control:
 
         if self.in_out =="in":
             self.back_switch = True
-
+'''
     def calculating_desired(self,x_des,y_des,z_des):
         phi_desired = atan2(-y_des, z_des)
         theta_desired = atan2(x_des, -y_des/sin(phi_desired))
         throttle = z_des/(cos(phi_desired)*cos(theta_desired))
         return phi_desired, theta_desired, throttle
-
+'''
     def desired_accelation(self):
+        # calcculating the vector from drone to targeted position (global)
         self.des_global_x = self.target_coordinate_long - self.longtitude
         self.des_global_y = self.target_coordinate_lat - self.latitude
         self.des_global_z = self.target_altitude - self.altitude
-
-        matrix([[self.des_body_x],[self.des_body_y],[self.des_body_z]]) = self.quat_to_matrix(self.quat_w,self.quat_x,self.quat_y,self.quat_z)*matrix([[self.des_global_x],[self.des_global_y],[self.des_global_z]])
         
+        # changing global vector to body frame vector
+        matrix([[self.des_body_x],[self.des_body_y],[self.des_body_z]]) = self.quat_to_matrix(self.quat_w,self.quat_x,self.quat_y,self.quat_z)*matrix([[self.des_global_x],[self.des_global_y],[self.des_global_z]])
+        # normalize the vector to size 1 to calculate the roll pitch yaw
         self.norm_body_x, self.norm_body_y, self.norm_body_z = normalization(self.des_body_x,self.des_body_y,self.des_body_z)
+
+        # pid loop
+
+        self.2d_dist = sqrt(self.des_global_x**2 + self.global_y**2)
+        self.3d_dist = sqrt(self.2d_dist**2 + self.des_global_z**2)
+        self.3d_error = self.3d_error - self.dist_sq
+
+        # I loop
+        self.error_I += self.ki*self.3d_dist*self.dt
+
+        # calculating the safe distance = 2m
+        self.error_value = self.kp*self.3d_error + self.error_I 
+
+
+        ## 
+
+
 
         self.x_tilt_value = -(self.norm_body_y)
         self.y_tilt_value = +(self.norm_body_x)
-        self.throttle_value = self.norm_body_z
+        self.throttle_value = self.backup_ch3 + self.norm_body_z
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+        # integrating the I term from(PID) and erase it every 3 sec
         self.x_I += self.error_x * self.dt
         self.y_I += self.error_y * self.dt
         self.z_I += self.error_z * self.dt
