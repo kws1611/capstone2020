@@ -146,13 +146,13 @@ class control:
 
         if self.in_out =="in":
             self.back_switch = True
-'''
+    '''
     def calculating_desired(self,x_des,y_des,z_des):
         phi_desired = atan2(-y_des, z_des)
         theta_desired = atan2(x_des, -y_des/sin(phi_desired))
         throttle = z_des/(cos(phi_desired)*cos(theta_desired))
         return phi_desired, theta_desired, throttle
-'''
+    '''
     def desired_accelation(self):
         # calcculating the vector from drone to targeted position (global)
         self.des_global_x = self.target_coordinate_long - self.longtitude
@@ -165,7 +165,6 @@ class control:
         self.norm_body_x, self.norm_body_y, self.norm_body_z = normalization(self.des_body_x,self.des_body_y,self.des_body_z)
 
         # pid loop
-
         self.2d_dist = sqrt(self.des_global_x**2 + self.global_y**2)
         self.3d_dist = sqrt(self.2d_dist**2 + self.des_global_z**2)
         self.3d_error = self.3d_error - self.dist_sq
