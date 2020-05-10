@@ -26,7 +26,7 @@ class gps:
         self.target_longtitude_max = 0
         self.target_radius = 0
 
-    def gps_reading(self,shape,lat_max,lat_min,lon_max,lon_min,r):
+    def gps_reading(self):
         self.data = self.ser.read()                      
         self.gpss = self.gpss + self.data    
                          
@@ -127,7 +127,8 @@ if __name__ == "__main__":
     try :
         gps_function = gps()
         time.sleep(1)
-        gps_function.gps_reading()
+        while(gps.latitude == 0 or longitue == 0):
+            gps_function.gps_reading()
         safe_area = safe_area()
         safe_area.setting(gps_function.latitude,gps_function.longtitude)
 
