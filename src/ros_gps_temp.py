@@ -70,7 +70,9 @@ class gps:
                 return str("out")
             
         elif shape == 'circle':
-            radius = np.sqrt(self.init_long-self.longtitude)^2 + (self.init_lat-self.longtitude)^2)
+            dx = (self.init_long-self.longtitude)*6371000
+            dy = (self.init_lat-self.longtitude)*6371000
+            radius = np.sqrt(dx^2 + dy^2)
             if radius < self.target_radius:
                 return str("in")
             else:
@@ -99,10 +101,11 @@ class safe_area:
                 x = input('x : ')
                 y = input('y : ')
                 print('the range is',x,'x',y)
-                self.target_latitude_min = lat - y/2
-                self.target_latitude_max = lat + y/2
-                self.target_longtitude_min = lon - x/2
-                self.target_longtitude_max = lon + x/2
+                degx, degy = dist_deg_trans(x,y)
+                self.target_latitude_min = lat - degy/2
+                self.target_latitude_max = lat + degy/2
+                self.target_longtitude_min = lon - degx/2
+                self.target_longtitude_max = lon + degx/2
                 
             elif shape == 'circle':
                 print('decide radius')
@@ -112,13 +115,18 @@ class safe_area:
                 print('decide the length of one side :')
                 x = input('x :')
                 print('the range is',x,'x',x)
-                self.target_latitude_min = lat - x/2
-                self.target_latitude_max = lat + x/2
-                self.target_longtitude_min = lon - x/2
-                self.target_longtitude_max = lon + x/2
+                degx, degy = dist_deg_trans(x,x)
+                self.target_latitude_min = lat - degx/2
+                self.target_latitude_max = lat + degx/2
+                self.target_longtitude_min = lon - degy/2
+                self.target_longtitude_max = lon + degy/2
         else:
             print("shoude be rec or circle or square")
 
+    def dist_deg_trans(x,y):
+        degx = x/6371000*180/np.pi*60          # x , earth radius , radian to degree , degree to minute
+        degy = y/6371000*180/np.pi*60          # d = degree, m = minute , latitude and longitude = ddmm.mmmm format
+        return degx,degy
 
 
 if __name__ == "__main__":
