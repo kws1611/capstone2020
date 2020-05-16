@@ -33,12 +33,12 @@ class gps:
             print(msg.lat)
             print(msg.lon)
             print(msg.altitude)           
-            print(msg.time)
+            print(msg.timestamp)
             try:
                 self.latitude = msg.lat
                 self.longtitude = msg.lon
                 self.altitude = msg.altitude
-                self.gps_time =  msg.time
+                self.gps_time =  msg.timestamp
                 self.gps_data_msg.latitude = self.latitude
                 self.gps_data_msg.altitude = self.altitude
                 self.gps_data_msg.longtitude = self.longtitude
