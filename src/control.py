@@ -82,21 +82,15 @@ class control:
         self.altitude = 0
         self.in_out = ""
         ### has to be added
-        self. dist_sq = 0
+        
 
         self.kp = 0.0
         self.ki = 0.0
         self.kd = 0.0
         self.dt = 1/50
 
-        self.ch1 = 1000
-        self.ch2 = 1000
-        self.ch3 = 1000
-        self.ch4 = 1000
-        self.ch5 = 1000
-        self.ch6 = 1000
-        self.ch7 = 1000
-        self.ch8 = 1000
+        self.ch1,self.ch2,self.ch3,self.ch4,self.ch5,self.ch6,self.ch7,self.ch8 = 1000,1000,1000,1000,1000,1000,1000,1000
+
         self.control_ch1, self.control_ch2, self.control_ch3, self.control_ch4 = 0.0, 0.0, 0.0, 0.0
         self.error_x,self.error_y, self.error_z = 0.0, 0.0, 0.0
         self.prev_error_x, self.prev_error_y, self.prev_error_z = 0.0, 0.0, 0.0
@@ -120,6 +114,7 @@ class control:
         self.target_longtitude_min = 0
         self.target_longtitude_max = 0
         self.target_altitude = 0
+        self.dist_sq = sqrt((self.target_latitude_max-self.target_latitude_min)**2 + (self.target_longtitude_max-self.target_longtitude_min))
         #############################################################################
 
         self.target_coordinate_lat = (self.target_latitude_max + self.target_latitude_max)/2
@@ -146,13 +141,6 @@ class control:
 
         if self.in_out =="in":
             self.back_switch = True
-    '''
-    def calculating_desired(self,x_des,y_des,z_des):
-        phi_desired = atan2(-y_des, z_des)
-        theta_desired = atan2(x_des, -y_des/sin(phi_desired))
-        throttle = z_des/(cos(phi_desired)*cos(theta_desired))
-        return phi_desired, theta_desired, throttle
-    '''
     def desired_accelation(self):
         # calcculating the vector from drone to targeted position (global)
         self.des_global_x = self.target_coordinate_long - self.longtitude
@@ -171,42 +159,12 @@ class control:
 
         # I loop
         self.error_I += self.ki*self.3d_dist*self.dt
-
         # calculating the safe distance = 2m
-        self.error_value = self.kp*self.3d_error + self.error_I 
-
-
-        ## 
-
-
-
-        self.x_tilt_value = -(self.norm_body_y)
-        self.y_tilt_value = +(self.norm_body_x)
-        self.throttle_value = self.backup_ch3 + self.norm_body_z
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-        # integrating the I term from(PID) and erase it every 3 sec
-        self.x_I += self.error_x * self.dt
-        self.y_I += self.error_y * self.dt
-        self.z_I += self.error_z * self.dt
-        if (time.time() - self.I_time) > 3 :
-            self.x_I, self.y_I, self.z_I = 0.0, 0.0, 0.0
-            self.I_time = time.time()
-
-        self.prev_error_x, self.prev_error_y, self.prev_error_z = self.error_x, self.error_y, self.error_z
-        self.phi_desired ,self.theta_desired, self.throttle = self.calculating_desired(self.x_desired_accel,self.y_desired_accel,self.z_desired_accel)
+        self.error_value = self.kp*self.3d_error + self.error_I  
+        self.tilt_value = self.error_value/self.error_maximum*500
+        self.x_tilt_value = -(self.norm_body_y*self.tilt_value)+1000
+        self.y_tilt_value = +(self.norm_body_x*self.tilt_value)+1000
+        self.throttle_value = self.backup_ch3 + self.norm_body_z*100
         return self.x_tilt_value, self.y_tilt_value, self.throttle_value
 
     def controling_process(self):
