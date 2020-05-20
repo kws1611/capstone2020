@@ -83,22 +83,16 @@ class control:
         self.in_out = ""
         ### has to be added
         
-
-        self.kp = 0.0
-        self.ki = 0.0
-        self.kd = 0.0
+        self.kp = 1
+        self.ki = 0.01
+        self.kd = 0.01
         self.dt = 1/50
+
+        self.error_maximum = 5
 
         self.ch1,self.ch2,self.ch3,self.ch4,self.ch5,self.ch6,self.ch7,self.ch8 = 1000,1000,1000,1000,1000,1000,1000,1000
 
         self.control_ch1, self.control_ch2, self.control_ch3, self.control_ch4 = 0.0, 0.0, 0.0, 0.0
-        self.error_x,self.error_y, self.error_z = 0.0, 0.0, 0.0
-        self.prev_error_x, self.prev_error_y, self.prev_error_z = 0.0, 0.0, 0.0
-        self.error_roll, self.error_pitch, self.error_yaw = 0.0, 0.0, 0.0
-        self.prev_roll, self.prev_pitch, self.prev_yaw = 0.0, 0.0 ,0.0
-        self.x_I, self.y_I, self.z_I = 0.0, 0.0, 0.0
-        self.roll_I, self.pitch_I, self.yaw_I = 0.0, 0.0 , 0.0
-        self.roll, self.pitch, self.yaw, self.throttle = 0.0, 0.0, 0.0, 0.0
         self.I_time = time.time()
         self.des_global_x, self.des_global_y, self.des_global_z = 0.0, 0.0, 0.0
         self.des_body_x, self.des_body_y, self.des_body_z = 0.0, 0.0, 0.0
@@ -153,14 +147,14 @@ class control:
         self.norm_body_x, self.norm_body_y, self.norm_body_z = normalization(self.des_body_x,self.des_body_y,self.des_body_z)
 
         # pid loop
-        self.2d_dist = sqrt(self.des_global_x**2 + self.global_y**2)
-        self.3d_dist = sqrt(self.2d_dist**2 + self.des_global_z**2)
-        self.3d_error = self.3d_error - self.dist_sq
-
+        self.d2_dist = sqrt(self.des_global_x**2 + self.global_y**2)
+        self.d3_dist = sqrt(self.d2_dist**2 + self.des_global_z**2)
+        self.d3_error = self.d3_error - self.dist_sq + 2
         # I loop
-        self.error_I += self.ki*self.3d_dist*self.dt
+        self.error_I += self.ki*self.d3_dist*self.dt
+
         # calculating the safe distance = 2m
-        self.error_value = self.kp*self.3d_error + self.error_I  
+        self.error_value = self.kp*self.d3_error + self.error_I  
         self.tilt_value = self.error_value/self.error_maximum*500
         self.x_tilt_value = -(self.norm_body_y*self.tilt_value)+1000
         self.y_tilt_value = +(self.norm_body_x*self.tilt_value)+1000
@@ -170,6 +164,7 @@ class control:
     def controling_process(self):
         self.channel_msg = ppm_msg()
         self.channel_msg.header.stamp = time.time()
+        self.checking_state()
         if self.in_out == "in":
             self.channel_msg.channel_1 = self.ch1
             self.channel_msg.channel_2 = self.ch2
@@ -177,11 +172,11 @@ class control:
             self.channel_msg.channel_4 = self.ch4 
 
         else :
-            self.calculating()
+            self.control_ch1, self.control_ch2, self.control_ch3 = self.desired_accelation()
             self.channel_msg.channel_1 = self.control_ch1
             self.channel_msg.channel_2 = self.control_ch2
             self.channel_msg.channel_3 = self.control_ch3
-            self.channel_msg.channel_4 = self.control_ch4
+            self.channel_msg.channel_4 = 1500
         self.channel_msg.channel_5 = self.ch5
         self.channel_msg.channel_6 = self.ch6
         self.channel_msg.channel_7 = self.ch7
