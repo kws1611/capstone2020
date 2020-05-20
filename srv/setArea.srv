@@ -1,0 +1,12 @@
+string shape   # 1: rec, 2: cir
+
+float64 latitude
+float64 longtitude
+
+float64 width
+float64 height
+
+float64 radius
+
+---
+bool result

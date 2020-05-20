@@ -8,8 +8,10 @@ import numpy as np
 
 class gps:
     def __init__(self):
+        self.gps_data_msg = gps_data()
+
         self.ser = serial.Serial("/dev/serial0",9600,timeout=0.5) 
-        self.gps_pub = rospy.Publisher("/gps_data", gps_data ,queue_size=1) 
+        self.gps_pub = rospy.Publisher("/gps_data", gps_data ,queue_size=1)
 
         self.longitude, self.latitude = 0 , 0
         ######################
@@ -80,8 +82,6 @@ class safe_area:
         self.target_longtitude_max = 0
 
     def setting(self,lat,lon):
-        lat = lat
-        lon = lon
         shape = input('shape of safe area : ')
         if shape == 'rec' or shape == 'circle' or shape == 'square':
             print(shape, 'is selected')
@@ -100,6 +100,7 @@ class safe_area:
                 print('decide radius')
                 r = input("r :")
                 print('the range is',r)
+                
             else:
                 print('decide the length of one side :')
                 x = input('x :')

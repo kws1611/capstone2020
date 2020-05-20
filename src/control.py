@@ -1,12 +1,9 @@
 #!/usr/bin/python
 
 import rospy
-from geometry_msgs.msg import Vector3
-from geometry_msgs.msg import Quaternion
-from geometry_msgs.msg import PoseStamped
-from geometry_msgs.msg import PoseWithCovarianceStamped
-from capstone2020.msg import ppm_msg
-from capstone2020.msg import gps_data
+from geometry_msgs.msg import Vector3, Quaternion, PoseStamped, PoseWithCovarianceStamped
+from capstone2020.msg import ppm_msg, gps_data
+from capstone2020.srv import setArea
 import numpy as np
 from numpy import matrix
 import time
@@ -60,7 +57,28 @@ class control:
         self.latitude = self.gps_msg.latitude
         self.longtitude = self.gps_msg.longtitude
         self.altitude = self.gps_msg.altitude
-        self.in_out = self.gps_msg.range
+
+        self.in_out = self.range_check()
+
+    def range_check(self):
+        if self.shape == 1:
+            if self.target_longtitude_min < self.longtitude < self.target_longtitude_max:
+                if self.target_latitude_min < self.latitude < self.target_latitude_max:
+                    return "in"
+                else:
+                    return "out"
+            else :
+                return "out"
+
+        elif self.shape == 2:
+            dx = (self.target_coordinate_lat - self.longtitude)*6371000
+            dy = (self.target_coordinate_long - self.latitude)*6371000
+            radius = sqrt(dx^2 + dy^2)
+
+            if radius < self.target_radius:
+                return "in"
+            else:
+                return "out"
 
     def kalman_cb(self, msg):
         self.kalman_msg = msg
@@ -68,6 +86,31 @@ class control:
         self.quat_y = self.kalman_msg.pose.pose.orientation.y
         self.quat_z = self.kalman_msg.pose.pose.orientation.z
         self.quat_w = self.kalman_msg.pose.pose.orientation.w
+
+    def area_cb(self, req):
+        self.areaSet = True
+
+        self.shape = req.shape
+
+        self.target_coordinate_lat = req.latitude
+        self.target_coordinate_long = req.longtitude
+        self.target_radius = req.radius
+
+        delta_lat, delta_lon = self.meter2deg(req.width, req.height)
+
+        self.target_latitude_min =  self.target_coordinate_lat - delta_lat/2
+        self.target_latitude_max =  self.target_coordinate_lat + delta_lat/2
+
+        self.target_longtitude_min = self.target_coordinate_long - delta_lon/2
+        self.target_longtitude_max = self.target_coordinate_long + delta_lon/2
+
+        return self.areaSet
+
+    def meter2deg(self, width, height):
+        delta_lat = height/6371000*180/math.pi*60         # x , earth radius , radian to degree , degree to minute
+        delta_lon = width/6371000*180/math.pi*60          # d = degree, m = minute , latitude and longitude = ddmm.mmmm format
+
+        return delta_lat, delta_lon
 
     def rotation_matrix(self,roll, pitch, yaw):
         # rotation matrix changing from global to drone frame
@@ -79,6 +122,15 @@ class control:
         return matrix([[(1-2*y**2-2*z**2), (2*x*y + 2*w*z), (2*x*z - 2*w*y)],[(2*x*y - 2*w*z), (1-2*x**2-2*z**2),(2*y*z + 2*w*x)],[(2*x*z + 2*w*y),(2*y*z - 2*w*x),(1-2*x**2 -2*y**2)]])
 
     def __init__(self):
+        # Safety area
+        self.areaSet = False
+
+        self.shape = None
+
+        self.target_coordinate_lat = None
+        self.target_coordinate_long = None
+        self.radius = None
+
         self.latitude = 0
         self.longtitude = 0
         self.altitude = 0
@@ -124,6 +176,8 @@ class control:
         rospy.Subscriber("/pose_covariance",PoseWithCovarianceStamped, self.kalman_cb)
 
         self.controling_pub = rospy.Publisher("/control_signal", ppm_msg, queue_size=1)
+
+        rospy.Service('set_area', setArea, self.area_cb)
 
     def checking_state(self):
         if self.back_switch:
