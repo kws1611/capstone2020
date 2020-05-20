@@ -177,6 +177,12 @@ class control:
         self.x_tilt_value = -(self.norm_body_y*self.tilt_value)+1000
         self.y_tilt_value = +(self.norm_body_x*self.tilt_value)+1000
         self.throttle_value = self.backup_ch3 + self.norm_body_z*10
+        if self.throttle_value > 1800:
+            self.throttle_value = 1800
+        elif self.throttle_value < 350:
+            self.throttle_value = 350
+        else :
+            pass
         return self.x_tilt_value, self.y_tilt_value, self.throttle_value
 
     def controling_process(self):

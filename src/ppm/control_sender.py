@@ -5,7 +5,7 @@ import pigpio
 import rospy
 import rospy
 import numpy as np
-from rise_control.msg import ppm_msg
+from capstone2020.msg import ppm_msg
 from std_msgs.msg import String
 
 
@@ -13,7 +13,7 @@ class X:
     WAVES = 8
     def __init__(self, pi, frame_ms=33):
         self.pi = pi
-        self.gpio = rospy.get_param("output/gpio")
+        self.gpio = 4#rospy.get_param("output/gpio")
         self.rate = rospy.Rate(1000)
         self.GAP = 300
 
@@ -30,7 +30,7 @@ class X:
         self.ch7 = 1000
         self.ch8 = 1000
 
-        self.channels = rospy.get_param("channel_number")
+        self.channels = 8#rospy.get_param("channel_number")
 
 
         self._widths = [1000] * self.channels  # set each channel to minimum pulse width
@@ -38,7 +38,7 @@ class X:
 
         self._wid = [None] * self.WAVES
         self._next_wid = 0
-
+        gpio = 4
         pi.write(gpio, pigpio.LOW)
 
         self._update_time = time.time()
