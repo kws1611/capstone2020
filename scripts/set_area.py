@@ -12,10 +12,7 @@ def send_srv(longtitude, latitude, radius):
     resp = set_area(longtitude, latitude, radius)
 
     if resp.result == True:
-        print("OK")
-
-    else:
-        print("Fail")
+        print("------Success------")
 
 def hook():
     print("Range should be more than 10m")
@@ -23,17 +20,23 @@ def hook():
 if __name__ == "__main__":
     minRange = 10
 
-    print("Set Longtitude(Decimal[Deg]): ")
+    print("Set Longtitude(Decimal[Deg]):")
     longtitude = input()
 
-    print("Set Latitude(Decimal[Deg]): ")
+    print("Set Latitude(Decimal[Deg]):")
     latitude = input()
 
-    print("Set Range(m): ")
+    print("Set Range(m):")
     radius = input()
 
     if radius < minRange:
         rospy.on_shutdown(hook)
 
     else:
-        send_srv(longtitude, latitude, radius)
+        try:
+            send_srv(longtitude, latitude, radius)
+
+        except rospy.ROSException:
+            print("------Fail------")
+
+            

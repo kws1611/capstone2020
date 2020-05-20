@@ -3,7 +3,6 @@
 import rospy
 from capstone2020.msg import Gps_data, Pose, Ppm
 from capstone2020.srv import setArea
-# import jetson.GPIO as GPIO or rpi.GPIO as GPIO
 import math
 
 class control:

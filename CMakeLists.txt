@@ -66,7 +66,7 @@ add_message_files(
 ## Generate services in the 'srv' folder
 add_service_files(
   FILES
-  setArea.srv
+  SetArea.srv
 )
 
 ## Generate actions in the 'action' folder
