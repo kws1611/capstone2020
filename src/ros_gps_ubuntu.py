@@ -8,10 +8,8 @@ import numpy as np
 
 class gps:
     def __init__(self):
-        self.gps_data_msg = gps_data()
-
         self.ser = serial.Serial("/dev/serial0",9600,timeout=0.5) 
-        self.gps_pub = rospy.Publisher("/gps_data", gps_data ,queue_size=1)
+        self.gps_pub = rospy.Publisher("/gps_data", gps_data ,queue_size=1) 
 
         self.longitude, self.latitude = 0 , 0
         ######################
@@ -37,8 +35,8 @@ class gps:
             print(msg.altitude)           
             print(msg.timestamp)
             try:
-                self.latitude = msg.lat
-                self.longtitude = msg.lon
+                self.latitude = self.changedegree(msg.lat)
+                self.longtitude = self.changedegree(msg.lon)
                 self.altitude = msg.altitude
                 self.gps_time =  msg.timestamp
                 self.gps_data_msg.latitude = self.latitude
@@ -49,6 +47,14 @@ class gps:
                 self.gps_pub.publish(self.gps_data_msg)
             except:
                 pass
+
+    def changedegree(self,x):
+        string2float=float(x)
+        minute=string2float%100
+        result=string2float-minute
+        result=result/100
+        result=result+minute/60
+        return result
 
     def range_check(self):
         if self.safe_area_shape == 'rec' or self.safe_area_shape == 'square':
@@ -71,7 +77,7 @@ class gps:
 
 
 class safe_area:
-    def __init__(self):
+    def __init__(self,lat):
         self.shape = ''
         self.r = 0
         self.x = 0
@@ -80,8 +86,12 @@ class safe_area:
         self.target_latitude_max = 0
         self.target_longtitude_min = 0
         self.target_longtitude_max = 0
+        self.R_1 = self.lat_e_radius(lat)
+        self.R_2 = self.R_1 * np.cos(lat/180*np.pi)
 
     def setting(self,lat,lon):
+        lat = lat
+        lon = lon
         shape = input('shape of safe area : ')
         if shape == 'rec' or shape == 'circle' or shape == 'square':
             print(shape, 'is selected')
@@ -100,7 +110,6 @@ class safe_area:
                 print('decide radius')
                 r = input("r :")
                 print('the range is',r)
-                
             else:
                 print('decide the length of one side :')
                 x = input('x :')
@@ -114,10 +123,15 @@ class safe_area:
             print("shoude be rec or circle or square")
 
     def dist_deg_trans(self,x,y):
-        degx = x/6371000*180/np.pi*60          # x , earth radius , radian to degree , degree to minute
-        degy = y/6371000*180/np.pi*60          # d = degree, m = minute , latitude and longitude = ddmm.mmmm format
+        degx = x/self.R_1*180/np.pi*60          # x , earth radius , radian to degree , degree to minute
+        degy = y/self.R_2*180/np.pi*60          # d = degree, m = minute , latitude and longitude = ddmm.mmmm format
         return degx,degy
-
+    
+    def lat_e_radius(self,x):
+        R = np.sqrt( ((6378137**2*np.cos(x*np.pi/180))**2+( 6356752.3142**2*np.sin(x*np.pi/180))**2)/
+               ((6378137*np.cos(x*np.pi/180))**2+( 6356752.3142*np.sin(x*np.pi/180))**2))
+        return R
+    
 
 if __name__ == "__main__":
     rospy.init_node("GPS_reading", anonymous = True)
@@ -127,7 +141,7 @@ if __name__ == "__main__":
         time.sleep(1)
         while(gps_function.latitude == 0 or gps_function.longitude == 0):
             gps_function.gps_reading()
-        safe_area = safe_area()
+        safe_area = safe_area(gps_function.latitude)
         safe_area.setting(gps_function.latitude,gps_function.longtitude)
 
         gps_function.init_lat = gps_function.latitude
