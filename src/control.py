@@ -159,12 +159,12 @@ class control:
 
         # target position put here
         ###########################################################################
-        self.target_latitude_min = -10
-        self.target_latitude_max = 10
-        self.target_longtitude_min = -10
-        self.target_longtitude_max = 10
+        self.target_latitude_min = 0
+        self.target_latitude_max = 0
+        self.target_longtitude_min = 0
+        self.target_longtitude_max = 0
         self.target_altitude = 10
-        self.dist_sq = sqrt((self.target_latitude_max-self.target_latitude_min)**2 + (self.target_longtitude_max-self.target_longtitude_min))
+        self.dist_sq = sqrt((self.target_latitude_max-self.target_latitude_min)**2 + (self.target_longtitude_max-self.target_longtitude_min)**2)
         #############################################################################
 
         self.target_coordinate_lat = (self.target_latitude_max + self.target_latitude_max)/2
