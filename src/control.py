@@ -114,7 +114,18 @@ class control:
         delta_lon = width/(R * cos(lat*pi/180))*180/pi          # d = degree, m = minute , latitude and longitude = ddmm.mmmm format
 
         return delta_lat, delta_lon
+    '''
+    def deg2meter(self, lat, ):
+        R_long = 6378137 # unit: meter
+        R_short = 6356752 # unit: meter
 
+        R = sqrt(((R_long**2 * cos(lat * pi/180))**2 + (R_short**2 * sin(lat * pi/180))**2)/
+               ((R_long * cos(lat * pi/180))**2 + (R_short * sin(lat * pi/180))**2))
+
+        meter_X = lat
+        meter_Y = 
+        return meter_X, meter_Y
+    '''
     def rotation_matrix(self,roll, pitch, yaw):
         # rotation matrix changing from global to drone frame
         # X Y Z rotation matrix
@@ -138,7 +149,9 @@ class control:
         self.longtitude = 0
         self.altitude = 0
         self.in_out = "in"
-        ### has to be added
+        self.in_out_switch = True   # True = in Faluse = out
+        self.hovering_switch = False  #True = hovering , False = radio control
+        self.hov_first_switch = True #True -> False = is the time when changing the ch6 value to hovering 
         
         self.kp = 5
         self.ki = 0.01
@@ -182,10 +195,26 @@ class control:
 
         rospy.Service('set_area', setArea, self.area_cb)
 
+    def cheching_Hovering_switch(self):
+        if self.ch6 > 1300 :
+            self.hovering_switch = True
+            if self.hov_first_switch:
+                ####################################################################### has to be changed to meter value
+                self.hov_back_up_X = self.latitude
+                self.hov_back_up_Y = self.longtitude
+                self.hov_back_up_Z = self.altitude
+                self.hov_first_switch = False
+        else :
+            self.hovering_switch = False
+            self.hov_first_switch = True
+
     def checking_state(self):
+        ######################################################### has to put the X Y Z value in the meter distance_error function 
+        self.d3_error, self.norm_body_x, self.norm_body_y = self.calculating_distance_error(1,1,1)
         if self.back_switch:
             if self.in_out == "out":
                 self.back_up_switch = True
+                self.in_out_switch = False
 
         if self.back_up_switch:
             self.back_up_ch1 = self.ch1
@@ -193,11 +222,17 @@ class control:
             self.back_up_ch3 = self.ch3
             self.back_up_ch4 = self.ch4
             self.back_up_switch = False
+            self.back_up_altitude = self.altitude
 
         if self.in_out =="in":
             self.back_switch = True
+            if (not self.in_out_switch) and (self.d3_error < 0.3):
+                self.in_out_switch = True
 
-    def desired_accelation(self):
+    def calculating_distance_error(self, X, Y, Z):
+        self.des_global_x = X
+        self.des_global_y = Y
+        self.des_global_z = Z
         # calcculating the vector from drone to targeted position (global)
         self.des_global_x = -self.target_coordinate_long + self.longtitude
         self.des_global_y = -self.target_coordinate_lat + self.latitude
@@ -211,9 +246,22 @@ class control:
         # pid loop
         self.d2_dist = sqrt(self.des_global_x**2 + self.des_global_y**2)
         self.d3_dist = sqrt(self.d2_dist**2 + self.des_global_z**2)
-        self.d3_error = self.d3_dist - self.dist_sq
+        if self.dist_sq < 5:
+            self.d3_error = self.d3_dist
+        else :
+            # calculating the safe distance = 2m when distance of box's radius is over 5m
+            self.d3_error = self.d3_dist - self.dist_sq + 2
+
+        return self.d3_error, self.norm_body_x, self.norm_body_y
+
+
+    def desired_accelation(self):
+        ############################################################################################# put self.calculating_dist X Y Z value in the function
+        self.d3_error, self.norm_body_x, self.norm_body_y = self.calculating_distance_error()
+
+        ### PID loop for roll and pitch value
         # I loop
-        self.error_I += self.ki*self.d3_dist*self.dt
+        self.error_I += self.ki*self.d3_error*self.dt
         if self.error_I > 1 :
             self.error_I = 1
         elif self.error_I < -1:
@@ -221,7 +269,6 @@ class control:
         else :
             pass
 
-        # calculating the safe distance = 2m
         self.error_value = self.kp*self.d3_error + self.error_I  
         self.tilt_value = self.error_value/self.error_maximum*500
         
@@ -231,27 +278,40 @@ class control:
             self.tilt_value = -500
         else :
             pass
-        print(self.norm_body_x, self.norm_body_z)
-        self.x_tilt_value = -(self.norm_body_y*self.tilt_value)+1000
-        self.y_tilt_value = +(self.norm_body_x*self.tilt_value)+1000
-        self.throttle_value = self.backup_ch3 + self.norm_body_z*10
+        
+        self.x_tilt_value = -(self.norm_body_y*self.tilt_value)+1500
+        self.y_tilt_value = +(self.norm_body_x*self.tilt_value)+1500
+
+        ### PID loop for altitude value
+        ######## error value used for throttle
+
+        self.throttle_value = self.backup_ch3 + self.error_value/self.error_maxium*100
         if self.throttle_value > 1800:
             self.throttle_value = 1800
         elif self.throttle_value < 350:
             self.throttle_value = 350
         else :
             pass
+        
         return self.x_tilt_value, self.y_tilt_value, self.throttle_value
 
     def controling_process(self):
         self.channel_msg = ppm_msg()
         self.channel_msg.header.stamp.secs = time.time()
         self.checking_state()
-        if self.in_out == "in":
+        self.cheching_Hovering_switch()
+        if (not self.hovering_switch) and self.in_out_switch:
             self.channel_msg.channel_1 = self.ch1
             self.channel_msg.channel_2 = self.ch2
             self.channel_msg.channel_3 = self.ch3
             self.channel_msg.channel_4 = self.ch4 
+
+        elif self.hovering_switch and self.in_out_switch:
+            self.control_ch1, self.control_ch2, self.control_ch3 = self.desired_accelation(self.hov_back_up_X, self.hov_back_up_Y, self.hov_back_up_Z)
+            self.channel_msg.channel_1 = self.control_ch1
+            self.channel_msg.channel_2 = self.control_ch2
+            self.channel_msg.channel_3 = self.control_ch3
+            self.channel_msg.channel_4 = 1500
 
         else :
             self.control_ch1, self.control_ch2, self.control_ch3 = self.desired_accelation()
