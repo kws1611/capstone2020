@@ -116,7 +116,7 @@ class control:
         delta_lon = width/(R * cos(lat*pi/180))*180/pi          # d = degree, m = minute , latitude and longitude = ddmm.mmmm format
 
         return delta_lat, delta_lon
-'''
+    '''
     def deg2meter(self, lat, ):
         R_long = 6378137 # unit: meter
         R_short = 6356752 # unit: meter
@@ -127,7 +127,7 @@ class control:
         meter_X = lat
         meter_Y = 
         return meter_X, meter_Y
-'''
+    '''
     def rotation_matrix(self,roll, pitch, yaw):
         # rotation matrix changing from global to drone frame
         # X Y Z rotation matrix
@@ -211,7 +211,8 @@ class control:
             self.hov_first_switch = True
 
     def checking_state(self):
-        self.d3_error, self.norm_body_x, self.norm_body_y = self.calculating_distance_error()
+        ######################################################### has to put the X Y Z value in the meter distance_error function 
+        self.d3_error, self.norm_body_x, self.norm_body_y = self.calculating_distance_error(1,1,1)
         if self.back_switch:
             if self.in_out == "out":
                 self.back_up_switch = True
@@ -248,7 +249,7 @@ class control:
         self.d2_dist = sqrt(self.des_global_x**2 + self.des_global_y**2)
         self.d3_dist = sqrt(self.d2_dist**2 + self.des_global_z**2)
         if self.dist_sq < 5:
-            self.d3_error = self.dist
+            self.d3_error = self.d3_dist
         else :
             # calculating the safe distance = 2m when distance of box's radius is over 5m
             self.d3_error = self.d3_dist - self.dist_sq + 2
