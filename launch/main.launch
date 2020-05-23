@@ -1,6 +1,7 @@
 <launch>
 
     <node name= "simulation_gps_node" pkg="capstone2020" type="simulation_gps_node.py" />
+    <!-- node name= "gps_node" pkg="capstone2020" type="gps_node.py" -->
     <node name= "controlling_node" pkg="capstone2020" type="control.py" output="screen" />
     <node name= "set_area_node" pkg="capstone2020" type="set_area.py" output="screen" />
     

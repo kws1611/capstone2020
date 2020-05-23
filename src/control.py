@@ -7,7 +7,6 @@ from capstone2020.srv import setArea
 import numpy as np
 from numpy import matrix
 import time
-import math
 from math import atan2, asin, sqrt, cos, sin, tan, acos, pi
 import numpy.linalg as lin
 import tf
@@ -18,6 +17,7 @@ quaternion to matrix
 2*q1*q2 + 2*q3*q0 , 1 - 2*q1**2 - 2*q3**2 , 2*q3*q2 - 2*q1*q0
 2*q1*q3 - 2*q2*q0 , 2*q2*q3 + 2*q1*q0 , 1-2*q1**2 -2*q2**2
 """
+
 def normalization(v1, v2, v3):
         #making the vector size 1
         norm = math.sqrt(v1**2 + v2**2 + v3**2)
@@ -29,28 +29,27 @@ def normalization(v1, v2, v3):
 def calculating_rpy(q0,q1,q2,q3):
     # calculating quaternion -> roll pitch yaw
     # euler angle is based on x-y-z order
-    quaternion_norm = math.sqrt(q0**2 + q1**2 + q2**2 + q3**2)
+    quaternion_norm = sqrt(q0**2 + q1**2 + q2**2 + q3**2)
     q0 = q0 / quaternion_norm
     q1 = q1 / quaternion_norm
     q2 = q2 / quaternion_norm
     q3 = q3 / quaternion_norm
-    roll = math.atan2((-2*q3*q2 + 2*q1*q0),(1-2*q1**2 -2*q2**2))
-    pitch = math.asin(2*q1*q3 + 2*q2*q0)
-    yaw = math.atan2((-2*q1*q2 + 2*q3*q0),(1-2*q2**2 - 2*q3**2))
+    roll = atan2((-2*q3*q2 + 2*q1*q0),(1-2*q1**2 -2*q2**2))
+    pitch = asin(2*q1*q3 + 2*q2*q0)
+    yaw = atan2((-2*q1*q2 + 2*q3*q0),(1-2*q2**2 - 2*q3**2))
     return roll, pitch, yaw
 
 class control:
 
     def ppm_cb(self, msg):
-        self.ppm_input_msg = msg
-        self.ch1 = int(self.ppm_input_msg.channel_1)
-        self.ch2 = int(self.ppm_input_msg.channel_2)
-        self.ch3 = int(self.ppm_input_msg.channel_3)
-        self.ch4 = int(self.ppm_input_msg.channel_4)
-        self.ch5 = int(self.ppm_input_msg.channel_5)
-        self.ch6 = int(self.ppm_input_msg.channel_6)
-        self.ch7 = int(self.ppm_input_msg.channel_7)
-        self.ch8 = int(self.ppm_input_msg.channel_8)
+        self.ch1 = int(msg.channel_1)
+        self.ch2 = int(msg.channel_2)
+        self.ch3 = int(msg.channel_3)
+        self.ch4 = int(msg.channel_4)
+        self.ch5 = int(msg.channel_5)
+        self.ch6 = int(msg.channel_6)
+        self.ch7 = int(msg.channel_7)
+        self.ch8 = int(msg.channel_8)
 
     def gps_cb(self, msg):
         self.latitude = msg.latitude
@@ -80,11 +79,10 @@ class control:
                 return "out"
 
     def kalman_cb(self, msg):
-        self.kalman_msg = msg
-        self.quat_x = self.kalman_msg.pose.pose.orientation.x
-        self.quat_y = self.kalman_msg.pose.pose.orientation.y
-        self.quat_z = self.kalman_msg.pose.pose.orientation.z
-        self.quat_w = self.kalman_msg.pose.pose.orientation.w
+        self.quat_x = msg.pose.pose.orientation.x
+        self.quat_y = msg.pose.pose.orientation.y
+        self.quat_z = msg.pose.pose.orientation.z
+        self.quat_w = msg.pose.pose.orientation.w
 
     def area_cb(self, req):
         self.areaSet = True
