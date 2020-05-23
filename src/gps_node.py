@@ -1,7 +1,8 @@
+#!/usr/bin/python
+
 import serial 
 import pynmea2
 import rospy
-from std_msgs.msg import String
 from capstone2020.msg import gps_data
 from math import sin, cos, sqrt, pi
 
@@ -20,7 +21,7 @@ class GPS:
 
             try:
                 self.gpsData.latitude = self.DDM2DD(msg.lat)
-                self.gpsData.altitude = self.DDM2DD(msg.lon)
+                self.gpsData.longitude = self.DDM2DD(msg.lon)
                 self.gpsData.altitude = msg.altitude
 
                 self.gps_pub.publish(self.gpsData)
@@ -32,7 +33,7 @@ class GPS:
         return float(x) % 100 / 60
 
 if __name__ == "__main__":
-    rospy.init_node("GPS_reading", anonymous = True)
+    rospy.init_node("gps_node", anonymous = True)
 
     try :
         gps = GPS()

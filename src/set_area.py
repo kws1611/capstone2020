@@ -68,11 +68,11 @@ if __name__ == "__main__":
     result = False
 
     try:
-        while safe_area.recieve is False:
+        while not rospy.is_shutdown() and safe_area.recieve is False:
             rospy.logwarn("Waiting until GPS data recieve")
             rospy.sleep(1)
         
-        while result is False:
+        while not rospy.is_shutdown() and result is False:
             result = safe_area.input_area()
 
     except:
