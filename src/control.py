@@ -8,7 +8,7 @@ import numpy as np
 from numpy import matrix
 import time
 import math
-from math import atan2, asin, sqrt, cos, sin, tan, acos
+from math import atan2, asin, sqrt, cos, sin, tan, acos, pi
 import numpy.linalg as lin
 import tf
 
@@ -53,10 +53,9 @@ class control:
         self.ch8 = int(self.ppm_input_msg.channel_8)
 
     def gps_cb(self, msg):
-        self.gps_msg = msg
-        self.latitude = self.gps_msg.latitude
-        self.longtitude = self.gps_msg.longtitude
-        self.altitude = self.gps_msg.altitude
+        self.latitude = msg.latitude
+        self.longtitude = msg.longtitude
+        self.altitude = msg.altitude
 
         self.in_out = self.range_check()
 
@@ -96,7 +95,7 @@ class control:
         self.target_coordinate_long = req.longtitude
         self.target_radius = req.radius
 
-        delta_lat, delta_lon = self.meter2deg(req.width, req.height)
+        delta_lat, delta_lon = self.meter2deg(self.latitude, req.width, req.height)
 
         self.target_latitude_min =  self.target_coordinate_lat - delta_lat/2
         self.target_latitude_max =  self.target_coordinate_lat + delta_lat/2
@@ -106,9 +105,15 @@ class control:
 
         return self.areaSet
 
-    def meter2deg(self, width, height):
-        delta_lat = height/6371000*180/math.pi*60         # x , earth radius , radian to degree , degree to minute
-        delta_lon = width/6371000*180/math.pi*60          # d = degree, m = minute , latitude and longitude = ddmm.mmmm format
+    def meter2deg(self, lat, width, height):
+        R_long = 6378137 # unit: meter
+        R_short = 6356752 # unit: meter
+
+        R = sqrt(((R_long**2 * cos(lat * pi/180))**2 + (R_short**2 * sin(lat * pi/180))**2)/
+               ((R_long * cos(lat * pi/180))**2 + (R_short * sin(lat * pi/180))**2))
+
+        delta_lat = height/R*180/pi         # x , earth radius , radian to degree , degree to minute
+        delta_lon = width/(R * cos(lat*pi/180))*180/pi          # d = degree, m = minute , latitude and longitude = ddmm.mmmm format
 
         return delta_lat, delta_lon
 
@@ -193,6 +198,7 @@ class control:
 
         if self.in_out =="in":
             self.back_switch = True
+
     def desired_accelation(self):
         # calcculating the vector from drone to targeted position (global)
         self.des_global_x = -self.target_coordinate_long + self.longtitude
