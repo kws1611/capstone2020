@@ -20,8 +20,8 @@ class control:
 
         self.earth_radius = None
 
-        self.inout = True; self.pre_inout = True  # if the location of drone is in of range, True
-        self.hoveringSW = False; self.pre_hoveringSW = False
+        self.pre_inout = True  
+        self.pre_hoveringSW = False
         self.auto_mode = False  # Auto mode
         
         # Set gps variables
@@ -65,11 +65,11 @@ class control:
         self.gps_status = True
 
         self.curLat = msg.latitude
-        self.curLon = msg.longtitude
+        self.curLon = msg.longitude
         self.curAlt = msg.altitude
 
         self.curLat_rad = msg.latitude * pi/180
-        self.curLon_rad = msg.longtitude * pi/180
+        self.curLon_rad = msg.longitude * pi/180
 
     def kalman_cb(self, msg):
         self.pose_status = True
@@ -90,7 +90,7 @@ class control:
         self.shape = req.shape
 
         self.areaCenterLat = req.latitude; self.areaCenterLat_rad = req.latitude * pi/180
-        self.areaCenterLon = req.longtitude; self.areaCenterLon_rad = req.longtitude * pi/180
+        self.areaCenterLon = req.longitude; self.areaCenterLon_rad = req.longitude * pi/180
 
         self.areaWidth = req.width  # Unit(m)
         self.areaHeight = req.height  # Unit(m)
@@ -114,11 +114,7 @@ class control:
         self.output_ppm_pub.publish(output_RC)
 
     def hoveringSW_check(self):
-        if self.input_RC.channel[6] > 1300:
-            self.auto_mode = True
-            return True
-        else:
-            return False
+        return self.input_RC.channel[6] > 1300
 
     def inout_check(self):
         # in = True, out = False
@@ -139,9 +135,9 @@ class control:
                 self.auto_mode = True
                 return False
 
-    def set_target(self):
+    def set_target(self, inout, hoveringSW):
         # Hovering SW 
-        if (self.pre_hoveringSW == True) and (self.hoveringSW == True):
+        if (self.pre_hoveringSW == False) and (hoveringSW == True):
             self.targetLat_rad = self.curLat_rad
             self.targetLon_rad = self.curLon_rad
             self.targetAlt = self.curAlt
@@ -149,12 +145,12 @@ class control:
             return
 
         # When get out of safety area
-        minLat = self.areaCenterLat_rad - self.areaDeltaLat_rad/2
-        maxLat = self.areaCenterLat_rad - self.areaDeltaLat_rad/2
-        minLon = self.areaCenterLat_rad - self.areaDeltaLat_rad/2
-        maxLon = self.areaCenterLat_rad - self.areaDeltaLat_rad/2
+        if (self.pre_inout == True) and (inout == False):
+            minLat = self.areaCenterLat_rad - self.areaDeltaLat_rad/2
+            maxLat = self.areaCenterLat_rad - self.areaDeltaLat_rad/2
+            minLon = self.areaCenterLat_rad - self.areaDeltaLat_rad/2
+            maxLon = self.areaCenterLat_rad - self.areaDeltaLat_rad/2
 
-        if (self.pre_inout == True) and (self.inout == False):
             if self.shape == 1:  # Rectangle
                 self.targetLat_rad = max(minLat, min(maxLat, self.curLat_rad))
                 self.targetLon_rad = max(minLon, min(maxLon, self.curLon_rad))
@@ -165,47 +161,8 @@ class control:
                 self.targetLon_rad = self.curLon_rad + (self.areaCenterLon_rad - self.curLon_rad) * self.areaRangeGap/self.areaRadius
                 self.targetAlt = self.curAlt
 
-    def process(self):
-        self.hoveringSW = self.hoveringSW_check()
-        self.inout = self.inout_check()
-
-        if (self.inout == True) and (self.auto_mode == False):
-            self.output_RC = self.input_RC
-        else:
-            self.set_target()
-            rospy.loginfo_once("target Lat: ", self.targetLat_rad * 180/pi)
-            rospy.loginfo_once("target Lon: ", self.targetLon_rad * 180/pi)
-            rospy.loginfo_once("target Alt: ", self.targetAlt)
-
-            self.output_RC = self.input_RC #self.auto_control(self.targetLat_rad, self.targetLon_rad, self.targetAlt, self.q)
-
-        print("inout: ", self.inout)
-        
-        self.pre_inout = self.inout
-        self.pre_hoveringSW = self.hoveringSW
-
-        self.ppm_pub(self.output_RC)
-
-    def auto_control(self, targetLat_rad, targetLon_rad, targetAlt, q):
-        dist_x = self.earth_radius * cos(self.areaCenterLat_rad) * (self.targetLat_rad - self.curLat_rad)
-        dist_y = self.earth_radius * (self.targetLon_rad - self.curLon_rad)
-        dist_z = self.targetAlt - self.curAlt
-
-        d = sqrt(dist_x**2 + dist_y**2 + dist_z**2)
-
-        body_dist = quat_mult([q[0], q[1], q[2], q[3]], quat_mult([0, dist_x, dist_y, dist_z], inv_quat([q[0], q[1], q[2], q[3]])))
-        
-        body_dist_x = body_dist[0]
-        body_dist_y = body_dist[1]
-        body_dist_z = body_dist[2]
-
-        # Reach check
-        if(self.reach_check(d) and self.controller_check() and ~self.hoveringSW):
-            self.auto_mode = False
-
-        return self.input_RC
-    
     def reach_check(self, d, _range = 1):
+        # Reach and wait 5 seconds
         if (d < _range):
             if(self.time_sw is False):
                 self.ref_time = rospy.Time.now()
@@ -223,9 +180,64 @@ class control:
     def controller_check(self):
         roll_neutrality = abs(self.input_RC.channel[0] -1500) < 50
         pitch_neutrality = abs(self.input_RC.channel[1] -1500) < 50
-        throtle_neutrality = self.input_RC.channel[2] > self.output_RC[2]
+        throtle_neutrality = self.input_RC.channel[2] > self.output_RC.channel[2]
 
         return  (roll_neutrality and pitch_neutrality and throtle_neutrality)
+
+    # PID control 
+    def auto_control(self, targetLat_rad, targetLon_rad, targetAlt, q, hoveringSW):
+        dist_x = self.earth_radius * cos(self.areaCenterLat_rad) * (self.targetLat_rad - self.curLat_rad)
+        dist_y = self.earth_radius * (self.targetLon_rad - self.curLon_rad)
+        dist_z = self.targetAlt - self.curAlt
+
+        d = sqrt(dist_x**2 + dist_y**2 + dist_z**2)
+
+        body_dist = quat_mult([q[0], q[1], q[2], q[3]], quat_mult([0, dist_x, dist_y, dist_z], inv_quat([q[0], q[1], q[2], q[3]])))
+        
+        body_dist_x = body_dist[0]
+        body_dist_y = body_dist[1]
+        body_dist_z = body_dist[2]
+
+        # Reach check
+        if(self.reach_check(d) and self.controller_check() and ~hoveringSW):
+            self.auto_mode = False
+
+        return # Something output
+
+    def process(self):
+        # Check channel 7 Switch
+        hoveringSW = self.hoveringSW_check()
+        if hoveringSW is True:
+            self.auto_mode = True
+
+        # Safety area setting check
+        # If the location of drone is in of range, inout = True
+        if self.areaSet is True:
+            inout = self.inout_check()
+        else:
+            inout = True
+            
+        # If safety area were not setted output_RC = input_RC
+        # If out range or auto_mode ouput_RC = auto_control
+        if (inout == True) and (self.auto_mode == False):
+            self.output_RC = self.input_RC
+        else:
+            self.set_target(inout, hoveringSW)
+            rospy.loginfo_once("target Lat: %.6f"%self.areaCenterLat)
+            rospy.loginfo_once("target Lon: %.6f"%self.areaCenterLon)
+ 
+            rospy.loginfo_once("target Lat: %.6f"%(self.targetLat_rad * 180/pi))
+            rospy.loginfo_once("target Lon: %.6f"%(self.targetLon_rad * 180/pi))
+            rospy.loginfo_once("target Alt: %.1f"%self.targetAlt)
+
+            self.output_RC = self.input_RC #self.auto_control(self.targetLat_rad, self.targetLon_rad, self.targetAlt, self.q, hoveringSW)
+
+        rospy.loginfo_throttle(1, "inout: %d"%inout)
+
+        self.pre_inout = inout
+        self.pre_hoveringSW = hoveringSW
+
+        self.ppm_pub(self.output_RC)
 
 def quat_mult(q1, q2):
         q = [0]*4
