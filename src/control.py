@@ -2,8 +2,8 @@
 
 import rospy
 from geometry_msgs.msg import Vector3, Quaternion, PoseStamped, PoseWithCovarianceStamped
-from capstone2020.msg import ppm_msg, gps_data
-from capstone2020.srv import setArea
+from capstone2020.msg import ppm_msg, GpsData
+from capstone2020.srv import SetArea
 import numpy as np
 from numpy import matrix
 import time
@@ -53,14 +53,14 @@ class control:
 
     def gps_cb(self, msg):
         self.latitude = msg.latitude
-        self.longtitude = msg.longtitude
+        self.longitude = msg.longitude
         self.altitude = msg.altitude
 
         self.in_out = self.range_check()
 
     def range_check(self):
         if self.shape == 1:
-            if self.target_longtitude_min < self.longtitude < self.target_longtitude_max:
+            if self.target_longitude_min < self.longitude < self.target_longitude_max:
                 if self.target_latitude_min < self.latitude < self.target_latitude_max:
                     return "in"
                 else:
@@ -69,7 +69,7 @@ class control:
                 return "out"
 
         elif self.shape == 2:
-            dx = (self.target_coordinate_lat - self.longtitude)*6371000
+            dx = (self.target_coordinate_lat - self.longitude)*6371000
             dy = (self.target_coordinate_long - self.latitude)*6371000
             radius = sqrt(dx^2 + dy^2)
 
@@ -90,7 +90,7 @@ class control:
         self.shape = req.shape
 
         self.target_coordinate_lat = req.latitude
-        self.target_coordinate_long = req.longtitude
+        self.target_coordinate_long = req.longitude
         self.target_radius = req.radius
 
         delta_lat, delta_lon = self.meter2deg(self.latitude, req.width, req.height)
@@ -98,8 +98,8 @@ class control:
         self.target_latitude_min =  self.target_coordinate_lat - delta_lat/2
         self.target_latitude_max =  self.target_coordinate_lat + delta_lat/2
 
-        self.target_longtitude_min = self.target_coordinate_long - delta_lon/2
-        self.target_longtitude_max = self.target_coordinate_long + delta_lon/2
+        self.target_longitude_min = self.target_coordinate_long - delta_lon/2
+        self.target_longitude_max = self.target_coordinate_long + delta_lon/2
 
         return self.areaSet
 
@@ -153,7 +153,7 @@ class control:
         self.radius = None
 
         self.latitude = 0
-        self.longtitude = 0
+        self.longitude = 0
         self.altitude = 0
         self.in_out = "in"
         self.in_out_switch = True   # True = in Faluse = out
@@ -183,21 +183,21 @@ class control:
         # target position put here
         self.target_latitude_min = 0
         self.target_latitude_max = 0
-        self.target_longtitude_min = 0
-        self.target_longtitude_max = 0
+        self.target_longitude_min = 0
+        self.target_longitude_max = 0
         self.target_altitude = 10
-        self.dist_sq = sqrt((self.target_latitude_max-self.target_latitude_min)**2 + (self.target_longtitude_max-self.target_longtitude_min)**2)
+        self.dist_sq = sqrt((self.target_latitude_max-self.target_latitude_min)**2 + (self.target_longitude_max-self.target_longitude_min)**2)
 
         # Subscriber created
         rospy.Subscriber("/input_ppm", ppm_msg, self.ppm_cb)
-        rospy.Subscriber("/gps_data", gps_data, self.gps_cb)
+        rospy.Subscriber("/gps_data", GpsData, self.gps_cb)
         rospy.Subscriber("/pose_covariance",PoseWithCovarianceStamped, self.kalman_cb)
         self.controling_pub = rospy.Publisher("/control_signal", ppm_msg, queue_size=1)
-        rospy.Service('set_area', setArea, self.area_cb)
+        rospy.Service('set_area', SetArea, self.area_cb)
 
         # home position below
         self.target_coordinate_lat = (self.target_latitude_min + self.target_latitude_max)/2
-        self.target_coordinate_long = (self.target_longtitude_max + self.target_longtitude_min)/2
+        self.target_coordinate_long = (self.target_longitude_max + self.target_longitude_min)/2
 
     def cheching_Hovering_switch(self):
         ############################################################# check the radio singnal just in case
@@ -206,7 +206,7 @@ class control:
             if self.hov_first_switch:
                 # target the point to hover
                 # the point when switch off -> switch on
-                self.hov_back_up_X = self.longtitude
+                self.hov_back_up_X = self.longitude
                 self.hov_back_up_Y = self.latitude
                 self.hov_back_up_Z = self.altitude
                 self.hov_first_switch = False
@@ -238,7 +238,7 @@ class control:
     def calculating_distance_error(self, X, Y, Z):
         # calcculating the vector from drone to targeted position (global)
         del_lat = self.latitude - X
-        del_lon = self.longtitude - Y
+        del_lon = self.longitude - Y
         del_meter_X, del_meter_Y = self.deg2meter(self.target_coordinate_lat, del_lat, del_lon)
 
         self.des_global_x = del_meter_X
