@@ -3,15 +3,15 @@
 import serial 
 import pynmea2
 import rospy
-from capstone2020.msg import gps_data
+from capstone2020.msg import GpsData
 from math import sin, cos, sqrt, pi
 
 class GPS:
     def __init__(self):
         self.ser = serial.Serial("/dev/serial0",9600,timeout=0.5) 
-        self.gps_pub = rospy.Publisher("/gps_data", gps_data ,queue_size=1)
+        self.gps_pub = rospy.Publisher("/gps_data", GpsData ,queue_size=1)
 
-        self.gpsData = gps_data()
+        self.gps_data = GpsData()
 
     def process(self):
         self.data = self.ser.readline()             
@@ -20,11 +20,11 @@ class GPS:
             msg = pynmea2.parse(self.data)
 
             try:
-                self.gpsData.latitude = self.DDM2DD(msg.lat)
-                self.gpsData.longitude = self.DDM2DD(msg.lon)
-                self.gpsData.altitude = msg.altitude
+                self.gps_data.latitude = self.DDM2DD(msg.lat)
+                self.gps_data.longitude = self.DDM2DD(msg.lon)
+                self.gps_data.altitude = msg.altitude
 
-                self.gps_pub.publish(self.gpsData)
+                self.gps_pub.publish(self.gps_data)
 
             except:
                 pass

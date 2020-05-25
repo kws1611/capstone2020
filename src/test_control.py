@@ -2,8 +2,8 @@
 
 import rospy
 from geometry_msgs.msg import PoseWithCovarianceStamped
-from capstone2020.msg import gps_data, Ppm
-from capstone2020.srv import setArea
+from capstone2020.msg import GpsData, Ppm
+from capstone2020.srv import SetArea
 from math import sin, cos, pi, sqrt
 
 class control:
@@ -54,11 +54,11 @@ class control:
         # Declare publisher, subscriber and service server
         self.output_ppm_pub = rospy.Publisher('/output_ppm', Ppm, queue_size= 1)
 
-        rospy.Subscriber('/gps_data', gps_data, self.gps_cb)
+        rospy.Subscriber('/gps_data', GpsData, self.gps_cb)
         rospy.Subscriber("/pose_covariance",PoseWithCovarianceStamped, self.kalman_cb)
         rospy.Subscriber('/input_ppm', Ppm, self.ppm_cb)
 
-        rospy.Service('/set_area', setArea, self.area_cb)
+        rospy.Service('/set_area', SetArea, self.area_cb)
  
     # subscriber's callback function
     def gps_cb(self, msg):
@@ -104,8 +104,8 @@ class control:
         self.earth_radius = sqrt(((R_long * cos(lat * pi/180))**2 + (R_short * sin(lat * pi/180))**2))
 
         # Set inner rectangle range in rad
-        self.areaDeltaLat_rad = (self.areaWidth - self.areaRangeGap) / (self.earth_radius * cos(self.areaCenterLat_rad))
-        self.areaDeltaLon_rad = (self.areaHeight - self.areaRangeGap) / self.earth_radius
+        self.areaDeltaLat_rad = (self.areaHeight - 2*self.areaRangeGap) / self.earth_radius 
+        self.areaDeltaLon_rad = (self.areaWidth - 2*self.areaRangeGap) / (self.earth_radius * cos(self.areaCenterLat_rad))
 
         return self.areaSet
 
@@ -114,12 +114,16 @@ class control:
         self.output_ppm_pub.publish(output_RC)
 
     def hoveringSW_check(self):
-        return self.input_RC.channel[6] > 1300
+        if self.input_RC.channel[6] > 1300:
+            self.auto_mode = True
+            return True
+        else:
+            return False
 
     def inout_check(self):
         # in = True, out = False
-        dist_x = self.earth_radius * cos(self.areaCenterLat_rad) * (self.areaCenterLat_rad - self.curLat_rad)
-        dist_y = self.earth_radius * (self.areaCenterLon_rad - self.curLon_rad)
+        dist_x = self.earth_radius * cos(self.areaCenterLat_rad) * (self.areaCenterLon_rad - self.curLon_rad)
+        dist_y = self.earth_radius * (self.areaCenterLat_rad - self.curLat_rad)
 
         if self.shape == 1:  # Rectangle
             if (abs(dist_x) < self.areaWidth/2) and (abs(dist_y) < self.areaHeight/2):
@@ -147,9 +151,9 @@ class control:
         # When get out of safety area
         if (self.pre_inout == True) and (inout == False):
             minLat = self.areaCenterLat_rad - self.areaDeltaLat_rad/2
-            maxLat = self.areaCenterLat_rad - self.areaDeltaLat_rad/2
-            minLon = self.areaCenterLat_rad - self.areaDeltaLat_rad/2
-            maxLon = self.areaCenterLat_rad - self.areaDeltaLat_rad/2
+            maxLat = self.areaCenterLat_rad + self.areaDeltaLat_rad/2
+            minLon = self.areaCenterLon_rad - self.areaDeltaLon_rad/2
+            maxLon = self.areaCenterLon_rad + self.areaDeltaLon_rad/2
 
             if self.shape == 1:  # Rectangle
                 self.targetLat_rad = max(minLat, min(maxLat, self.curLat_rad))
@@ -160,9 +164,8 @@ class control:
                 self.targetLat_rad = self.curLat_rad + (self.areaCenterLat_rad - self.curLat_rad) * self.areaRangeGap/self.areaRadius
                 self.targetLon_rad = self.curLon_rad + (self.areaCenterLon_rad - self.curLon_rad) * self.areaRangeGap/self.areaRadius
                 self.targetAlt = self.curAlt
-
+        
     def reach_check(self, d, _range = 1):
-        # Reach and wait 5 seconds
         if (d < _range):
             if(self.time_sw is False):
                 self.ref_time = rospy.Time.now()
@@ -183,11 +186,10 @@ class control:
         throtle_neutrality = self.input_RC.channel[2] > self.output_RC.channel[2]
 
         return  (roll_neutrality and pitch_neutrality and throtle_neutrality)
-
-    # PID control 
+        
     def auto_control(self, targetLat_rad, targetLon_rad, targetAlt, q, hoveringSW):
-        dist_x = self.earth_radius * cos(self.areaCenterLat_rad) * (self.targetLat_rad - self.curLat_rad)
-        dist_y = self.earth_radius * (self.targetLon_rad - self.curLon_rad)
+        dist_x = self.earth_radius * cos(self.areaCenterLat_rad) * (self.targetLon_rad - self.curLon_rad)
+        dist_y = self.earth_radius * (self.targetLat_rad - self.curLat_rad)
         dist_z = self.targetAlt - self.curAlt
 
         d = sqrt(dist_x**2 + dist_y**2 + dist_z**2)
@@ -213,18 +215,26 @@ class control:
         # Safety area setting check
         # If the location of drone is in of range, inout = True
         if self.areaSet is True:
+            rospy.loginfo_once("area set: %d"%self.areaSet)
             inout = self.inout_check()
         else:
             inout = True
-            
+
         # If safety area were not setted output_RC = input_RC
         # If out range or auto_mode ouput_RC = auto_control
         if (inout == True) and (self.auto_mode == False):
             self.output_RC = self.input_RC
         else:
             self.set_target(inout, hoveringSW)
-            self.output_RC = self.auto_control(self.targetLat_rad, self.targetLon_rad, self.targetAlt, self.q, hoveringSW)
 
+            rospy.loginfo_once("target Lat: %.6f"%(self.targetLat_rad * 180/pi))
+            rospy.loginfo_once("target Lon: %.6f"%(self.targetLon_rad * 180/pi))
+            rospy.loginfo_once("target Alt: %.1f"%self.targetAlt)
+
+            self.output_RC = self.input_RC #self.auto_control(self.targetLat_rad, self.targetLon_rad, self.targetAlt, self.q, hoveringSW)
+
+        rospy.loginfo_throttle(1, "inout: %d"%inout)
+        
         self.pre_inout = inout
         self.pre_hoveringSW = hoveringSW
 
