@@ -137,7 +137,7 @@ class control:
 
     def set_target(self, inout, hoveringSW):
         # Hovering SW 
-        if (self.pre_hoveringSW == True) and (hoveringSW == True):
+        if (self.pre_hoveringSW == False) and (hoveringSW == True):
             self.targetLat_rad = self.curLat_rad
             self.targetLon_rad = self.curLon_rad
             self.targetAlt = self.curAlt
