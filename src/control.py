@@ -116,18 +116,25 @@ class control:
         delta_lon = width/(R * cos(lat*pi/180))*180/pi          # d = degree, m = minute , latitude and longitude = ddmm.mmmm format
 
         return delta_lat, delta_lon
-    '''
-    def deg2meter(self, lat, ):
+    
+    def deg2meter(self, lat, del_lat, del_lon):
+        # changing degree difference to meter
+        # lontitude -> X axis
+        # latitude -> Y axis
+
+        ########################################################## lat = home position???
+
         R_long = 6378137 # unit: meter
         R_short = 6356752 # unit: meter
 
         R = sqrt(((R_long**2 * cos(lat * pi/180))**2 + (R_short**2 * sin(lat * pi/180))**2)/
                ((R_long * cos(lat * pi/180))**2 + (R_short * sin(lat * pi/180))**2))
 
-        meter_X = lat
-        meter_Y = 
+        meter_X = del_lat*R*pi/180
+        meter_Y = del_lon*(R*cos(lat*pi/180))*pi/180
+
         return meter_X, meter_Y
-    '''
+    
     def rotation_matrix(self,roll, pitch, yaw):
         # rotation matrix changing from global to drone frame
         # X Y Z rotation matrix
@@ -176,34 +183,33 @@ class control:
         self.back_up_ch1, self.back_up_ch2, self.back_up_ch3, self.back_up_ch4 = 0.0, 0.0, 0.0, 0.0
 
         # target position put here
-        ###########################################################################
         self.target_latitude_min = 0
         self.target_latitude_max = 0
         self.target_longtitude_min = 0
         self.target_longtitude_max = 0
         self.target_altitude = 10
         self.dist_sq = sqrt((self.target_latitude_max-self.target_latitude_min)**2 + (self.target_longtitude_max-self.target_longtitude_min)**2)
-        #############################################################################
-
-        self.target_coordinate_lat = (self.target_latitude_max + self.target_latitude_max)/2
-        self.target_coordinate_long = (self.target_longtitude_max + self.target_longtitude_min)/2
 
         # Subscriber created
         rospy.Subscriber("/input_ppm", ppm_msg, self.ppm_cb)
         rospy.Subscriber("/gps_data", gps_data, self.gps_cb)
         rospy.Subscriber("/pose_covariance",PoseWithCovarianceStamped, self.kalman_cb)
-
         self.controling_pub = rospy.Publisher("/control_signal", ppm_msg, queue_size=1)
-
         rospy.Service('set_area', setArea, self.area_cb)
 
+        # home position below
+        self.target_coordinate_lat = (self.target_latitude_min + self.target_latitude_max)/2
+        self.target_coordinate_long = (self.target_longtitude_max + self.target_longtitude_min)/2
+
     def cheching_Hovering_switch(self):
-        if self.ch6 > 1300 :
+        ############################################################# check the radio singnal just in case
+        if self.ch5 > 1300 :
             self.hovering_switch = True
             if self.hov_first_switch:
-                ####################################################################### has to be changed to meter value
-                self.hov_back_up_X = self.latitude
-                self.hov_back_up_Y = self.longtitude
+                # target the point to hover
+                # the point when switch off -> switch on
+                self.hov_back_up_X = self.longtitude
+                self.hov_back_up_Y = self.latitude
                 self.hov_back_up_Z = self.altitude
                 self.hov_first_switch = False
         else :
@@ -211,8 +217,8 @@ class control:
             self.hov_first_switch = True
 
     def checking_state(self):
-        ######################################################### has to put the X Y Z value in the meter distance_error function 
-        self.d3_error, self.norm_body_x, self.norm_body_y = self.calculating_distance_error(1,1,1)
+        # checking state from current_state -> home position
+        self.d3_error, self.norm_body_x, self.norm_body_y = self.calculating_distance_error(self.target_coordinate_long, self.target_coordinate_lat,self.back_up_altitude)
         if self.back_switch:
             if self.in_out == "out":
                 self.back_up_switch = True
@@ -232,22 +238,26 @@ class control:
                 self.in_out_switch = True
 
     def calculating_distance_error(self, X, Y, Z):
-        self.des_global_x = X
-        self.des_global_y = Y
-        self.des_global_z = Z
         # calcculating the vector from drone to targeted position (global)
-        self.des_global_x = -self.target_coordinate_long + self.longtitude
-        self.des_global_y = -self.target_coordinate_lat + self.latitude
-        self.des_global_z = -self.target_altitude + self.altitude
+        del_lat = self.latitude - X
+        del_lon = self.longtitude - Y
+        del_meter_X, del_meter_Y = self.deg2meter(self.target_coordinate_lat, del_lat, del_lon)
+
+        self.des_global_x = del_meter_X
+        self.des_global_y = del_meter_Y
+        self.des_global_z = -Z + self.altitude
         
         # changing global vector to body frame vector
         ([[self.des_body_x],[self.des_body_y],[self.des_body_z]]) = (self.quat_to_matrix(self.quat_w,self.quat_x,self.quat_y,self.quat_z))*matrix([[self.des_global_x],[self.des_global_y],[self.des_global_z]])
+        
         # normalize the vector to size 1 to calculate the roll pitch yaw
         self.norm_body_x, self.norm_body_y, self.norm_body_z = normalization(self.des_body_x,self.des_body_y,self.des_body_z)
 
-        # pid loop
+        # pid loop error calculation part
         self.d2_dist = sqrt(self.des_global_x**2 + self.des_global_y**2)
         self.d3_dist = sqrt(self.d2_dist**2 + self.des_global_z**2)
+
+        # making the drone to come into 2m more
         if self.dist_sq < 5:
             self.d3_error = self.d3_dist
         else :
@@ -257,13 +267,16 @@ class control:
         return self.d3_error, self.norm_body_x, self.norm_body_y
 
 
-    def desired_accelation(self):
-        ############################################################################################# put self.calculating_dist X Y Z value in the function
-        self.d3_error, self.norm_body_x, self.norm_body_y = self.calculating_distance_error()
+    def desired_accelation(self, X, Y, Z):
+        # calculating the error value and vector value 
+        # from current drone coordinate -> target corrdinate(home or hovering)
+        self.d3_error, self.norm_body_x, self.norm_body_y = self.calculating_distance_error(X, Y, Z)
 
         ### PID loop for roll and pitch value
         # I loop
         self.error_I += self.ki*self.d3_error*self.dt
+
+        # making the I term not go over -1~1
         if self.error_I > 1 :
             self.error_I = 1
         elif self.error_I < -1:
@@ -272,8 +285,12 @@ class control:
             pass
 
         self.error_value = self.kp*self.d3_error + self.error_I  
+        # calculating the tilt value to tilt roll and pitch
+        # error value is divided by error maximum to make slower 
+        # error maximum value = 5m
         self.tilt_value = self.error_value/self.error_maximum*500
         
+        # tilt value is between -500~500
         if self.tilt_value > 500:
             self.tilt_value = 500
         elif self.tilt_value < -500:
@@ -286,8 +303,9 @@ class control:
 
         ### PID loop for altitude value
         ######## error value used for throttle
-
         self.throttle_value = self.backup_ch3 + self.error_value/self.error_maxium*100
+
+        # throttle value is between 350~1800
         if self.throttle_value > 1800:
             self.throttle_value = 1800
         elif self.throttle_value < 350:
@@ -316,7 +334,7 @@ class control:
             self.channel_msg.channel_4 = 1500
 
         else :
-            self.control_ch1, self.control_ch2, self.control_ch3 = self.desired_accelation()
+            self.control_ch1, self.control_ch2, self.control_ch3 = self.desired_accelation(self.target_coordinate_long, self.target_coordinate_lat, self.back_up_altitude)
             self.channel_msg.channel_1 = self.control_ch1
             self.channel_msg.channel_2 = self.control_ch2
             self.channel_msg.channel_3 = self.control_ch3
