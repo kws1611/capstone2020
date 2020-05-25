@@ -65,11 +65,11 @@ class control:
         self.gps_status = True
 
         self.curLat = msg.latitude
-        self.curLon = msg.longtitude
+        self.curLon = msg.longitude
         self.curAlt = msg.altitude
 
         self.curLat_rad = msg.latitude * pi/180
-        self.curLon_rad = msg.longtitude * pi/180
+        self.curLon_rad = msg.longitude * pi/180
 
     def kalman_cb(self, msg):
         self.pose_status = True
@@ -90,7 +90,7 @@ class control:
         self.shape = req.shape
 
         self.areaCenterLat = req.latitude; self.areaCenterLat_rad = req.latitude * pi/180
-        self.areaCenterLon = req.longtitude; self.areaCenterLon_rad = req.longtitude * pi/180
+        self.areaCenterLon = req.longitude; self.areaCenterLon_rad = req.longitude * pi/180
 
         self.areaWidth = req.width  # Unit(m)
         self.areaHeight = req.height  # Unit(m)
