@@ -1,0 +1,7 @@
+<launch>
+
+    <node name= "test_gps_node" pkg="capstone2020" type="test_gps_node.py" />
+    <node name= "test_control_node" pkg="capstone2020" type="test_control.py" output="screen" />
+    <node name= "set_area_node" pkg="capstone2020" type="set_area.py" output="screen" />
+    
+</launch>

@@ -58,8 +58,7 @@ find_package(OpenCV REQUIRED)
 ## Generate messages in the 'msg' folder
 add_message_files(
   FILES
-  Gps_data.msg
-  Pose.msg
+  GpsData.msg
   Ppm.msg
 )
 

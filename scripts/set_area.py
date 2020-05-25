@@ -1,42 +1,79 @@
 #!/usr/bin/env python
 
 import rospy
-import std_msgs.msg
+from math import pi
+from capstone2020.msg import gps_data
 from capstone2020.srv import setArea
 
-def send_srv(longtitude, latitude, radius):
-    rospy.wait_for_service('set_area')
+class safeArea:
+    def __init__(self):
+        self.recieve = False
+        self.gpsData = gps_data()
 
-    set_area = rospy.ServiceProxy("set_area", setArea)
+        self.width = 0
+        self.height = 0
+        self.radius = 0
 
-    resp = set_area(longtitude, latitude, radius)
+        rospy.Subscriber("/gps_data", gps_data, self.gpsCb)
 
-    if resp.result == True:
-        print("------Success------")
+        self.set_area_client = rospy.ServiceProxy("/set_area", setArea)
 
-def hook():
-    print("Range should be more than 10m")
+    def send_srv(self, shape, latitude, longtitude, width, height, radius):
+        rospy.wait_for_service('/set_area')
+
+        resp = self.set_area_client(shape, latitude, longtitude, width, height, radius)
+
+        if resp.result == True:
+            rospy.loginfo("OK")
+            return True
+
+        else:
+            rospy.loginfo("Fail")
+            return False
+
+    def gpsCb(self, msg):
+        self.recieve = True
+        self.gpsData = msg
+
+    def input_area(self):
+        rospy.loginfo("shape of safe area[rec, cir]: ")
+        shape = {"rec": 1, "cir": 2}.get(input(), 3)
+
+        try:
+            if shape == 1:
+                rospy.loginfo("Width[m]: ")
+                self.width = float(input())
+                rospy.loginfo("Height[m]: ")
+                self.height = float(input())
+
+            elif shape == 2:
+                rospy.loginfo("Radius[m]: ")
+                self.radius = float(input())
+
+            else:
+                rospy.logerr("Should be \"rec\" or \"cir\"")
+                return False
+
+        except:
+            rospy.logerr("Input only number")
+            return False
+
+        return self.send_srv(shape, self.gpsData.latitude, self.gpsData.longtitude, self.width, self.height, self.radius)
 
 if __name__ == "__main__":
-    minRange = 10
+    rospy.init_node("set_area_node")
 
-    print("Set Longtitude(Decimal[Deg]):")
-    longtitude = input()
+    safe_area = safeArea()
 
-    print("Set Latitude(Decimal[Deg]):")
-    latitude = input()
+    result = False
 
-    print("Set Range(m):")
-    radius = input()
+    try:
+        while not rospy.is_shutdown() and safe_area.recieve is False:
+            rospy.logwarn("Waiting until GPS data recieve")
+            rospy.sleep(1)
+        
+        while not rospy.is_shutdown() and result is False:
+            result = safe_area.input_area()
 
-    if radius < minRange:
-        rospy.on_shutdown(hook)
-
-    else:
-        try:
-            send_srv(longtitude, latitude, radius)
-
-        except rospy.ROSException:
-            print("------Fail------")
-
-            
+    except:
+        pass
