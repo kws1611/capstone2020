@@ -53,6 +53,7 @@ add_message_files(
   FILES
   gps_data.msg
   ppm_msg.msg
+  Ppm.msg
 #   Message2.msg
 )
 
