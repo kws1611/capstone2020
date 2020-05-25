@@ -1,0 +1,6 @@
+ch1 = 500(left)~1500(right)     ------- pitch
+ch2 = 500(front)~1500(back)     ------- roll
+ch3 = 500(down)~1500(up)     ------- throttle
+ch4 = 500(left)~1500(right)     ------- yaw
+ch5 = 500(top) 100(middle) 1500(down)
+ch7 = 500(top) 1500(down)

@@ -5,13 +5,13 @@ import math
 import pigpio # http://abyz.co.uk/rpi/pigpio/python.html
 import rospy
 import numpy as np
-from rise_control.msg import ppm_msg
+from capstone2020.msg import ppm_msg
 from std_msgs.msg import String
 
 class PWM_read:
     def __init__(self, pi):
         self.pi = pi
-        self.gpio = rospy.get_param("input/gpio")
+        self.gpio = 18 #rospy.get_param("input/gpio")
         self._high_tick = None
         self._p = None
         self._hp = None
@@ -23,7 +23,7 @@ class PWM_read:
         self.ch_final = [0,0,0,0,0,0,0,0,0]
         self.rate = rospy.Rate(50)
         self.first_switch = True
-
+        gpio = 18
         self._cb = pi.callback(gpio, pigpio.EITHER_EDGE, self._cbf)
         self.input_pub = rospy.Publisher("/input_ppm",ppm_msg,queue_size=1)
 
