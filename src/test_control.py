@@ -145,12 +145,12 @@ class control:
             return
 
         # When get out of safety area
-        minLat = self.areaCenterLat_rad - self.areaDeltaLat_rad/2
-        maxLat = self.areaCenterLat_rad - self.areaDeltaLat_rad/2
-        minLon = self.areaCenterLat_rad - self.areaDeltaLat_rad/2
-        maxLon = self.areaCenterLat_rad - self.areaDeltaLat_rad/2
-
         if (self.pre_inout == True) and (inout == False):
+            minLat = self.areaCenterLat_rad - self.areaDeltaLat_rad/2
+            maxLat = self.areaCenterLat_rad - self.areaDeltaLat_rad/2
+            minLon = self.areaCenterLat_rad - self.areaDeltaLat_rad/2
+            maxLon = self.areaCenterLat_rad - self.areaDeltaLat_rad/2
+
             if self.shape == 1:  # Rectangle
                 self.targetLat_rad = max(minLat, min(maxLat, self.curLat_rad))
                 self.targetLon_rad = max(minLon, min(maxLon, self.curLon_rad))
