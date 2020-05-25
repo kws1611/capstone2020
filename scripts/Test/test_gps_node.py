@@ -15,7 +15,6 @@ class GPS:
 
     def process(self):
         if self.fix == 0:
-            self.gps_data.header.stamp = rospy.Time.now()
             self.gps_pub.publish(self.gps_data)
 
     def positionCb(self, msg):
@@ -25,7 +24,7 @@ class GPS:
         self.gps_data.altitude = msg.altitude
 
 if __name__ == "__main__":
-    rospy.init_node("test_gps_node", anonymous = True)
+    rospy.init_node("simulation_gps_node", anonymous = True)
 
     try :
         gps = GPS()
