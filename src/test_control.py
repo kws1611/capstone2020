@@ -2,7 +2,7 @@
 
 import rospy
 from geometry_msgs.msg import PoseWithCovarianceStamped
-from capstone2020.msg import GpsData, ppm_msg
+from capstone2020.msg import GpsData, Ppm
 from capstone2020.srv import SetArea
 from math import sin, cos, pi, sqrt
 
@@ -43,20 +43,21 @@ class control:
         self.ref_time = None
 
         # Set ppm variables
-        self.input_RC = ppm_msg()
-        self.output_RC = ppm_msg()
+        self.input_RC = Ppm()
+        self.output_RC = Ppm()
         
         # Set PID control variables
-        self.P_gain = 0.5
-        self.I_gain = 0.5
+        self.P_gain = 5
+        self.I_gain = 0.1
         self.D_gain = 0.5
+        self.error_I = 0
 
         # Declare publisher, subscriber and service server
-        self.output_ppm_pub = rospy.Publisher('/output_ppm', ppm_msg, queue_size= 1)
+        self.output_ppm_pub = rospy.Publisher('/output_ppm', Ppm, queue_size= 1)
 
         rospy.Subscriber('/gps_data', GpsData, self.gps_cb)
         rospy.Subscriber("/pose_covariance",PoseWithCovarianceStamped, self.kalman_cb)
-        rospy.Subscriber('/input_ppm', ppm_msg, self.ppm_cb)
+        rospy.Subscriber('/input_ppm', Ppm, self.ppm_cb)
 
         rospy.Service('/set_area', SetArea, self.area_cb)
  
@@ -80,7 +81,8 @@ class control:
                 msg.pose.pose.orientation.z]
 
     def ppm_cb(self, msg):
-        self.input_RC = msg
+        for i in range(8):
+            self.input_RC.channel[i] = msg.channel[i]
 
     def area_cb(self, req):
         # Service callback
@@ -113,7 +115,7 @@ class control:
         self.output_ppm_pub.publish(output_RC)
 
     def hoveringSW_check(self):
-        if self.input_RC.channel_7 < 700:
+        if self.input_RC.channel[6] > 1300:
             self.auto_mode = True
             return True
         else:
@@ -144,6 +146,7 @@ class control:
             self.targetLat_rad = self.curLat_rad
             self.targetLon_rad = self.curLon_rad
             self.targetAlt = self.curAlt
+            self.targetThrottle = self.input_RC.channel_3
 
             return
 
@@ -158,11 +161,13 @@ class control:
                 self.targetLat_rad = max(minLat, min(maxLat, self.curLat_rad))
                 self.targetLon_rad = max(minLon, min(maxLon, self.curLon_rad))
                 self.targetAlt = self.curAlt
+                self.targetThrottle = self.input_RC.channel_3
 
             else:  # Circle
                 self.targetLat_rad = self.curLat_rad + (self.areaCenterLat_rad - self.curLat_rad) * self.areaRangeGap/self.areaRadius
                 self.targetLon_rad = self.curLon_rad + (self.areaCenterLon_rad - self.curLon_rad) * self.areaRangeGap/self.areaRadius
                 self.targetAlt = self.curAlt
+                self.targetThrottle = self.input_RC.channel_3
         
     def reach_check(self, d, _range = 1):
         if (d < _range):
@@ -180,13 +185,14 @@ class control:
             return False
 
     def controller_check(self):
-        roll_neutrality = abs(self.input_RC.channel_1 -1500) < 50
-        pitch_neutrality = abs(self.input_RC.channel_2 -1500) < 50
-        throtle_neutrality = self.input_RC.channel_3 > self.output_RC.channel_3
+        roll_neutrality = abs(self.input_RC.channel[0] -1500) < 50
+        pitch_neutrality = abs(self.input_RC.channel[1] -1500) < 50
+        throtle_neutrality = self.input_RC.channel[2] > self.output_RC.channel[2]
 
         return  (roll_neutrality and pitch_neutrality and throtle_neutrality)
         
     def auto_control(self, targetLat_rad, targetLon_rad, targetAlt, q, hoveringSW):
+        ##################### dt has to be added##################################3
         dist_x = self.earth_radius * cos(self.areaCenterLat_rad) * (self.targetLon_rad - self.curLon_rad)
         dist_y = self.earth_radius * (self.targetLat_rad - self.curLat_rad)
         dist_z = self.targetAlt - self.curAlt
@@ -199,11 +205,40 @@ class control:
         body_dist_y = body_dist[1]
         body_dist_z = body_dist[2]
 
+        norm_body_x = body_dist_x / sqrt(body_dist_x**2 + body_dist_y**2)
+        norm_body_y = body_dist_y / sqrt(body_dist_x**2 + body_dist_y**2)
+        
+        ### PID loop for roll and pitch value
+        # I loop
+        self.error_I += self.I_gain*d*self.dt
+
+        # making the I term not go over -1~1
+        self.error_I = max(-1, min(self.error_I, 1))
+
+        error_value = self.P_gain*d + self.error_I  
+        # calculating the tilt value to tilt roll and pitch
+        # error value is divided by error maximum to make slower 
+        # error maximum value = 5m   !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+        tilt_value = error_value/5*500
+        
+        # tilt value is between -500~500
+        tilt_value = max(-500,min(tilt_value,500))
+        x_tilt_value = 1000 -(norm_body_y*tilt_value)
+        y_tilt_value = +(norm_body_x*tilt_value)+1000
+
+        ### PID loop for altitude value
+        ######## error value used for throttle
+        # error maximum value check!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+        throttle_value = self.targetThrottle + error_value/5*100
+
+        # throttle value is between 350~1800
+        throttle_value = max(550, min(throttle_value, 1400))
+
         # Reach check
         if(self.reach_check(d) and self.controller_check() and ~hoveringSW):
             self.auto_mode = False
 
-        return # Something output
+        return x_tilt_value, y_tilt_value, throttle_value
 
     def process(self):
         # Check channel 7 Switch

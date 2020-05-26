@@ -200,7 +200,6 @@ class control:
         self.target_coordinate_long = (self.target_longitude_max + self.target_longitude_min)/2
 
     def cheching_Hovering_switch(self):
-        ############################################################# check the radio singnal just in case
         if self.ch5 > 1300 :
             self.hovering_switch = True
             if self.hov_first_switch:
