@@ -2,7 +2,7 @@
 
 import rospy
 from geometry_msgs.msg import PoseWithCovarianceStamped
-from capstone2020.msg import GpsData, Ppm
+from capstone2020.msg import GpsData, ppm_msg
 from capstone2020.srv import SetArea
 from math import sin, cos, pi, sqrt
 
@@ -43,8 +43,8 @@ class control:
         self.ref_time = None
 
         # Set ppm variables
-        self.input_RC = Ppm()
-        self.output_RC = Ppm()
+        self.input_RC = ppm_msg()
+        self.output_RC = ppm_msg()
         
         # Set PID control variables
         self.P_gain = 0.5
@@ -52,11 +52,11 @@ class control:
         self.D_gain = 0.5
 
         # Declare publisher, subscriber and service server
-        self.output_ppm_pub = rospy.Publisher('/output_ppm', Ppm, queue_size= 1)
+        self.output_ppm_pub = rospy.Publisher('/output_ppm', ppm_msg, queue_size= 1)
 
         rospy.Subscriber('/gps_data', GpsData, self.gps_cb)
         rospy.Subscriber("/pose_covariance",PoseWithCovarianceStamped, self.kalman_cb)
-        rospy.Subscriber('/input_ppm', Ppm, self.ppm_cb)
+        rospy.Subscriber('/input_ppm', ppm_msg, self.ppm_cb)
 
         rospy.Service('/set_area', SetArea, self.area_cb)
  
@@ -80,8 +80,7 @@ class control:
                 msg.pose.pose.orientation.z]
 
     def ppm_cb(self, msg):
-        for i in range(8):
-            self.input_RC.channel[i] = msg.channel[i]
+        self.input_RC = msg
 
     def area_cb(self, req):
         # Service callback
@@ -114,7 +113,7 @@ class control:
         self.output_ppm_pub.publish(output_RC)
 
     def hoveringSW_check(self):
-        if self.input_RC.channel[6] > 1300:
+        if self.input_RC.channel_7 < 700:
             self.auto_mode = True
             return True
         else:
@@ -181,9 +180,9 @@ class control:
             return False
 
     def controller_check(self):
-        roll_neutrality = abs(self.input_RC.channel[0] -1500) < 50
-        pitch_neutrality = abs(self.input_RC.channel[1] -1500) < 50
-        throtle_neutrality = self.input_RC.channel[2] > self.output_RC.channel[2]
+        roll_neutrality = abs(self.input_RC.channel_1 -1500) < 50
+        pitch_neutrality = abs(self.input_RC.channel_2 -1500) < 50
+        throtle_neutrality = self.input_RC.channel_3 > self.output_RC.channel_3
 
         return  (roll_neutrality and pitch_neutrality and throtle_neutrality)
         
