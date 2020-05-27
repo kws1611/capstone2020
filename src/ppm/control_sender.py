@@ -5,7 +5,7 @@ import pigpio
 import rospy
 import rospy
 import numpy as np
-from capstone2020.msg import ppm_msg
+from capstone2020.msg import Ppm
 from std_msgs.msg import String
 
 
@@ -42,8 +42,8 @@ class X:
         pi.write(gpio, pigpio.LOW)
 
         self._update_time = time.time()
-        rospy.Subscriber("/control_signal", ppm_msg, self.ppm_cb)
-        self.ppm_output_pub = rospy.Publisher("/output_ppm", ppm_msg, queue_size=1)
+        rospy.Subscriber("/control_signal", Ppm, self.ppm_cb)
+        self.ppm_output_pub = rospy.Publisher("/output_ppm", Ppm, queue_size=1)
 
 
     def ppm_cb(self, msg):
@@ -97,7 +97,7 @@ class X:
 
     def sending_process(self):
         #rospy.Subscriber("/input_ppm", ppm_msg, self.ppm_cb)
-        self.sending_topic = ppm_msg()
+        self.sending_topic = Ppm()
         chan_1 = self.ch1
         chan_2 = self.ch2
         chan_3 = self.ch3

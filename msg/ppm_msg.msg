@@ -1,10 +1,10 @@
 Header header
 
-float64 channel_1
-float64 channel_2
-float64 channel_3
-float64 channel_4
-float64 channel_5
-float64 channel_6
-float64 channel_7
-float64 channel_8
+uint16 channel_1
+uint16 channel_2
+uint16 channel_3
+uint16 channel_4
+uint16 channel_5
+uint16 channel_6
+uint16 channel_7
+uint16 channel_8

@@ -5,7 +5,7 @@ import math
 import pigpio # http://abyz.co.uk/rpi/pigpio/python.html
 import rospy
 import numpy as np
-from capstone2020.msg import ppm_msg
+from capstone2020.msg import Ppm
 from std_msgs.msg import String
 
 class PWM_read:
@@ -25,10 +25,9 @@ class PWM_read:
         self.first_switch = True
         gpio = 18
         self._cb = pi.callback(gpio, pigpio.EITHER_EDGE, self._cbf)
-        self.input_pub = rospy.Publisher("/input_ppm",ppm_msg,queue_size=1)
+        self.input_pub = rospy.Publisher("/input_ppm",Ppm,queue_size=1)
 
     def _cbf(self, gpio, level, tick):
-        input_channel = ppm_msg()
         if level == 1:
             if self._high_tick is not None:
                 self._p = pigpio.tickDiff(self._high_tick, tick)
@@ -43,7 +42,7 @@ class PWM_read:
                 self.count = 0
     def reading_process(self):
         #print("reading_proce")
-        read_message = ppm_msg()
+        read_message = Ppm()
         if self.first_switch:
             if self.ch[self.count] > 7000:
                 self.basic_ppm_signal_count = self.count
@@ -64,7 +63,7 @@ class PWM_read:
         read_message.channel_6 = self.ch_final[5]
         read_message.channel_7 = self.ch_final[6]
         read_message.channel_8 = self.ch_final[7]
-        read_message.header.stamp = rospy.Time.now()
+        
         self.input_pub.publish(read_message)
         self.rate.sleep()
     
