@@ -24,15 +24,11 @@ class GPS:
         self.gps_data.altitude = msg.altitude
 
 if __name__ == "__main__":
-    rospy.init_node("simulation_gps_node", anonymous = True)
+    rospy.init_node("test_gps_node")
 
-    try :
-        gps = GPS()
+    gps = GPS()
 
-        rospy.sleep(1)
+    rospy.sleep(1)
 
-        while not rospy.is_shutdown():
-            gps.process()
-
-    except rospy.ROSInterruptException:
-        pass
+    while not rospy.is_shutdown():
+        gps.process()
