@@ -42,8 +42,8 @@ class X:
         pi.write(gpio, pigpio.LOW)
 
         self._update_time = time.time()
-        rospy.Subscriber("/control_signal", Ppm, self.ppm_cb)
-        self.ppm_output_pub = rospy.Publisher("/output_ppm", Ppm, queue_size=1)
+        rospy.Subscriber("/output_ppm", Ppm, self.ppm_cb)
+        #self.ppm_output_pub = rospy.Publisher("/output_ppm", Ppm, queue_size=1)
 
 
     def ppm_cb(self, msg):
