@@ -64,9 +64,9 @@ class control:
         rospy.Subscriber("/pose_covariance",PoseWithCovarianceStamped, self.kalman_cb)
         rospy.Subscriber('/input_ppm', Ppm, self.ppm_cb)
 
-        rospy.Subscriber('/mavros/rc/in', RCIn, self.rc_in)
+        #rospy.Subscriber('/mavros/rc/in', RCIn, self.rc_in)
         rospy.Subscriber('/mavros/imu/data', Imu, self.imu)
-        self.out_rc = rospy.Publisher('/mavros/rc/override', OverrideRCIn, queue_size= 1)
+        #self.out_rc = rospy.Publisher('/mavros/rc/override', OverrideRCIn, queue_size= 1)
 
         rospy.Service('/set_area', SetArea, self.area_cb)
 
@@ -90,6 +90,7 @@ class control:
                 msg.orientation.z]
         
     # rc out
+    '''
     def rc_out(self, output_RC):
         out = OverrideRCIn()
         out.channels[0] = output_RC.channel_1
@@ -102,7 +103,7 @@ class control:
         out.channels[7] = output_RC.channel_8
 
         self.out_rc.publish(out)
- 
+    '''
     # subscriber's callback function
     def gps_cb(self, msg):
         self.gps_status = True
@@ -247,7 +248,7 @@ class control:
         rospy.loginfo_throttle(1, "y: %d"%dist_y)
         rospy.loginfo_throttle(1, "z: %d"%dist_z)
 
-        body_dist = quat_mult(inv_quat([q[0], q[1], q[2], q[3]]), quat_mult([0, dist_x, dist_y, dist_z], [q[0], q[1], q[2], q[3]]))
+        body_dist = quat_mult(inv_quat([q[0], 0, 0, q[3]]), quat_mult([0, dist_x, dist_y, dist_z], [q[0], 0, 0, q[3]]))
 
         body_dist_x = body_dist[1]
         body_dist_y = body_dist[2]
@@ -279,8 +280,8 @@ class control:
         
         # tilt value is between -500~500
         tilt_value = max(-500,min(tilt_value,500))
-        x_tilt_value = 1500 -(norm_body_y*tilt_value)
-        y_tilt_value = +(norm_body_x*tilt_value)+1500
+        x_tilt_value = 1000 -(norm_body_y*tilt_value)
+        y_tilt_value = +(norm_body_x*tilt_value)+1000
 
         '''
         rospy.loginfo_throttle(1, "x: %d"%norm_body_x)
@@ -293,7 +294,7 @@ class control:
         throttle_value = self.targetThrottle + error_value/5*100
 
         # throttle value is between 350~1800
-        throttle_value = max(1100, min(throttle_value, 1900))
+        throttle_value = max(550, min(throttle_value, 1400))
 
         # Reach check
         if(self.reach_check(d) and self.controller_check() and ~hoveringSW):
@@ -303,7 +304,7 @@ class control:
         output.channel_1 = x_tilt_value
         output.channel_2 = y_tilt_value
         output.channel_3 = throttle_value
-        output.channel_4 = 1000
+        output.channel_4 = 500
         output.channel_5 = self.input_RC.channel_5
         output.channel_6 = self.input_RC.channel_6
         output.channel_7 = self.input_RC.channel_7
@@ -353,7 +354,7 @@ class control:
 
         rospy.loginfo_throttle(1, "auto_mode: %d"%self.auto_mode)
 
-        self.rc_out(self.output_RC)
+        self.ppm_cb(self.output_RC)
 
 def quat_mult(q1, q2):
         q = [0]*4

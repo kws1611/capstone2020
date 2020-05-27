@@ -1,5 +1,3 @@
-Header header
-
 uint16 channel_1
 uint16 channel_2
 uint16 channel_3
