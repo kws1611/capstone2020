@@ -6,6 +6,10 @@ from capstone2020.msg import GpsData, Ppm
 from capstone2020.srv import SetArea
 from math import sin, cos, pi, sqrt
 
+from mavros_msgs.msg import RCIn
+from mavros_msgs.msg import OverrideRCIn
+from sensor_msgs.msg import Imu
+
 class control:
     def __init__(self):
         # Set safety area variables
@@ -41,6 +45,7 @@ class control:
 
         self.time_sw = False
         self.ref_time = None
+        self.dt = 0.05
 
         # Set ppm variables
         self.input_RC = Ppm()
@@ -59,8 +64,46 @@ class control:
         rospy.Subscriber("/pose_covariance",PoseWithCovarianceStamped, self.kalman_cb)
         rospy.Subscriber('/input_ppm', Ppm, self.ppm_cb)
 
+        #rospy.Subscriber('/mavros/rc/in', RCIn, self.rc_in)
+        rospy.Subscriber('/mavros/imu/data', Imu, self.imu)
+        #self.out_rc = rospy.Publisher('/mavros/rc/override', OverrideRCIn, queue_size= 1)
+
         rospy.Service('/set_area', SetArea, self.area_cb)
- 
+
+    # rc cb
+    def rc_in(self, msg):
+        self.input_RC.channel_1 = msg.channels[0]
+        self.input_RC.channel_2 = msg.channels[1]
+        self.input_RC.channel_3 = msg.channels[2]
+        self.input_RC.channel_4 = msg.channels[3]
+        self.input_RC.channel_5 = msg.channels[4]
+        self.input_RC.channel_6 = msg.channels[5]
+        self.input_RC.channel_7 = msg.channels[6]
+        self.input_RC.channel_8 = msg.channels[7]
+
+    def imu(self, msg):
+        self.pose_status = True
+        
+        self.q = [msg.orientation.w,
+                msg.orientation.x,
+                msg.orientation.y,
+                msg.orientation.z]
+        
+    # rc out
+    '''
+    def rc_out(self, output_RC):
+        out = OverrideRCIn()
+        out.channels[0] = output_RC.channel_1
+        out.channels[1] = output_RC.channel_2
+        out.channels[2] = output_RC.channel_3
+        out.channels[3] = output_RC.channel_4
+        out.channels[4] = output_RC.channel_5
+        out.channels[5] = output_RC.channel_6
+        out.channels[6] = output_RC.channel_7
+        out.channels[7] = output_RC.channel_8
+
+        self.out_rc.publish(out)
+    '''
     # subscriber's callback function
     def gps_cb(self, msg):
         self.gps_status = True
@@ -81,8 +124,7 @@ class control:
                 msg.pose.pose.orientation.z]
 
     def ppm_cb(self, msg):
-        for i in range(8):
-            self.input_RC.channel[i] = msg.channel[i]
+        self.input_RC = msg
 
     def area_cb(self, req):
         # Service callback
@@ -110,12 +152,14 @@ class control:
 
         return self.areaSet
 
+    '''
     def ppm_pub(self, output_RC):
         output_RC.header.stamp = rospy.Time.now()
         self.output_ppm_pub.publish(output_RC)
-
+    '''
+    
     def hoveringSW_check(self):
-        if self.input_RC.channel[6] > 1300:
+        if 200 < self.input_RC.channel_7 < 700:
             self.auto_mode = True
             return True
         else:
@@ -130,14 +174,12 @@ class control:
             if (abs(dist_x) < self.areaWidth/2) and (abs(dist_y) < self.areaHeight/2):
                 return True
             else:
-                self.auto_mode = True
                 return False
 
         else:  # Circle
             if sqrt(dist_x**2 + dist_y**2) < self.areaRadius:
                 return True
             else:
-                self.auto_mode = True
                 return False
 
     def set_target(self, inout, hoveringSW):
@@ -151,7 +193,7 @@ class control:
             return
 
         # When get out of safety area
-        if (self.pre_inout == True) and (inout == False):
+        if (self.pre_inout == True) and (inout == False) and (hoveringSW == False):
             minLat = self.areaCenterLat_rad - self.areaDeltaLat_rad/2
             maxLat = self.areaCenterLat_rad + self.areaDeltaLat_rad/2
             minLon = self.areaCenterLon_rad - self.areaDeltaLon_rad/2
@@ -187,26 +229,43 @@ class control:
     def controller_check(self):
         roll_neutrality = abs(self.input_RC.channel[0] -1500) < 50
         pitch_neutrality = abs(self.input_RC.channel[1] -1500) < 50
-        throtle_neutrality = self.input_RC.channel[2] > self.output_RC.channel[2]
+        throtle_neutrality = self.input_RC.channel_3 > self.output_RC.channel_3
 
         return  (roll_neutrality and pitch_neutrality and throtle_neutrality)
         
     def auto_control(self, targetLat_rad, targetLon_rad, targetAlt, q, hoveringSW):
+        R_long = 6378137 # unit: meter
+        R_short = 6356752 # unit: meter
+        lat = self.curLat_rad
+
+        self.earth_radius = sqrt(((R_long * cos(lat * pi/180))**2 + (R_short * sin(lat * pi/180))**2))
         ##################### dt has to be added##################################3
-        dist_x = self.earth_radius * cos(self.areaCenterLat_rad) * (self.targetLon_rad - self.curLon_rad)
+        dist_x = self.earth_radius * cos(self.curLat_rad) * (self.targetLon_rad - self.curLon_rad)
         dist_y = self.earth_radius * (self.targetLat_rad - self.curLat_rad)
         dist_z = self.targetAlt - self.curAlt
 
         d = sqrt(dist_x**2 + dist_y**2 + dist_z**2)
 
-        body_dist = quat_mult([q[0], q[1], q[2], q[3]], quat_mult([0, dist_x, dist_y, dist_z], inv_quat([q[0], q[1], q[2], q[3]])))
-        
-        body_dist_x = body_dist[0]
-        body_dist_y = body_dist[1]
-        body_dist_z = body_dist[2]
+        rospy.loginfo_throttle(1, "x: %d"%dist_x)
+        rospy.loginfo_throttle(1, "y: %d"%dist_y)
+        rospy.loginfo_throttle(1, "z: %d"%dist_z)
 
-        norm_body_x = body_dist_x / sqrt(body_dist_x**2 + body_dist_y**2)
-        norm_body_y = body_dist_y / sqrt(body_dist_x**2 + body_dist_y**2)
+        body_dist = quat_mult(inv_quat([q[0], 0, 0, q[3]]), quat_mult([0, dist_x, dist_y, dist_z], [q[0], 0, 0, q[3]]))
+
+        body_dist_x = body_dist[1]
+        body_dist_y = body_dist[2]
+        body_dist_z = body_dist[3]
+
+        rospy.loginfo_throttle(1, "bx: %d"%body_dist[1])
+        rospy.loginfo_throttle(1, "by: %d"%body_dist[2])
+        rospy.loginfo_throttle(1, "bz: %d"%body_dist[3])
+        
+        if(body_dist_x**2 + body_dist_y**2 > 1):
+            norm_body_x = body_dist_x / sqrt(body_dist_x**2 + body_dist_y**2)
+            norm_body_y = body_dist_y / sqrt(body_dist_x**2 + body_dist_y**2)
+        else:
+            norm_body_x =0
+            norm_body_y =0
         
         ### PID loop for roll and pitch value
         # I loop
@@ -215,7 +274,7 @@ class control:
         # making the I term not go over -1~1
         self.error_I = max(-1, min(self.error_I, 1))
 
-        error_value = self.P_gain*d + self.error_I  
+        error_value = self.P_gain*d + self.error_I
         # calculating the tilt value to tilt roll and pitch
         # error value is divided by error maximum to make slower 
         # error maximum value = 5m   !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
@@ -226,6 +285,11 @@ class control:
         x_tilt_value = 1000 -(norm_body_y*tilt_value)
         y_tilt_value = +(norm_body_x*tilt_value)+1000
 
+        '''
+        rospy.loginfo_throttle(1, "x: %d"%norm_body_x)
+        rospy.loginfo_throttle(1, "y: %d"%norm_body_y)
+        rospy.loginfo_throttle(1, "tilt: %d"%tilt_value)
+        '''
         ### PID loop for altitude value
         ######## error value used for throttle
         # error maximum value check!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
@@ -238,49 +302,70 @@ class control:
         if(self.reach_check(d) and self.controller_check() and ~hoveringSW):
             self.auto_mode = False
 
-        return x_tilt_value, y_tilt_value, throttle_value
+        output = Ppm()
+        output.channel_1 = x_tilt_value
+        output.channel_2 = y_tilt_value
+        output.channel_3 = throttle_value
+        output.channel_4 = 500
+        output.channel_5 = self.input_RC.channel_5
+        output.channel_6 = self.input_RC.channel_6
+        output.channel_7 = self.input_RC.channel_7
+        output.channel_8 = self.input_RC.channel_8
+        return output
 
     def process(self):
-        # Check channel 7 Switch
-        hoveringSW = self.hoveringSW_check()
-        if hoveringSW is True:
-            self.auto_mode = True
+        if (self.gps_status is True): #and (self.pose_status is True):
+            # Check channel 7 Switch
+            hoveringSW = self.hoveringSW_check()
+            if hoveringSW is True:
+                self.auto_mode = True
 
-        # Safety area setting check
-        # If the location of drone is in of range, inout = True
-        if self.areaSet is True:
-            rospy.loginfo_once("area set: %d"%self.areaSet)
-            inout = self.inout_check()
+            # Safety area setting check
+            # If the location of drone is in of range, inout = True
+            if self.areaSet is True:
+                rospy.loginfo_once("area set: %d"%self.areaSet)
+                inout = self.inout_check()
+                if inout is False:
+                    self.auto_mode = True
+            else:
+                inout = True
+            rospy.loginfo_throttle(1, "inout: %d"%inout)
+            
         else:
-            inout = True
+            self.auto_mode = False
 
         # If safety area were not setted output_RC = input_RC
         # If out range or auto_mode ouput_RC = auto_control
-        if (inout == True) and (self.auto_mode == False):
+        if self.auto_mode is False:
             self.output_RC = self.input_RC
         else:
             self.set_target(inout, hoveringSW)
+
+            rospy.loginfo_once("out Lat: %.6f"%self.curLat)
+            rospy.loginfo_once("out Lon: %.6f"%self.curLon)
+            rospy.loginfo_once("out Alt: %.1f"%self.curAlt)
 
             rospy.loginfo_once("target Lat: %.6f"%(self.targetLat_rad * 180/pi))
             rospy.loginfo_once("target Lon: %.6f"%(self.targetLon_rad * 180/pi))
             rospy.loginfo_once("target Alt: %.1f"%self.targetAlt)
 
-            self.output_RC = self.input_RC #self.auto_control(self.targetLat_rad, self.targetLon_rad, self.targetAlt, self.q, hoveringSW)
+            self.output_RC = self.auto_control(self.targetLat_rad, self.targetLon_rad, self.targetAlt, self.q, hoveringSW)
 
-        rospy.loginfo_throttle(1, "inout: %d"%inout)
-        
-        self.pre_inout = inout
-        self.pre_hoveringSW = hoveringSW
+            self.pre_inout = inout
+            self.pre_hoveringSW = hoveringSW
 
-        self.ppm_pub(self.output_RC)
+        rospy.loginfo_throttle(1, "auto_mode: %d"%self.auto_mode)
+
+        self.output_RC.header.stamp = rospy.Time.now()
+        self.output_ppm_pub.publish(self.output_RC)
 
 def quat_mult(q1, q2):
         q = [0]*4
 
         q[0] = q1[0]*q2[0] - q1[1]*q2[1] - q1[2]*q2[2] - q1[3]*q2[3]
-        q[1] = q1[1]*q2[0] + q1[0]*q2[1] + q1[3]*q2[2] - q1[2]*q2[3]
-        q[2] = q1[2]*q2[0] - q1[3]*q2[1] + q1[0]*q2[2] + q1[1]*q2[3]
-        q[3] = q1[3]*q2[0] + q1[2]*q2[1] - q1[1]*q2[2] + q1[0]*q2[3]
+        q[1] = q1[0]*q2[1] + q1[1]*q2[0] + q1[2]*q2[3] - q1[3]*q2[2]
+        q[2] = q1[0]*q2[2] + q1[2]*q2[0] + q1[3]*q2[1] - q1[1]*q2[3] 
+        q[3] = q1[0]*q2[3] + q1[3]*q2[0] + q1[1]*q2[2] - q1[2]*q2[1] 
 
         return q
 

@@ -2,26 +2,26 @@
 
 import rospy
 from math import pi
-from capstone2020.msg import gps_data
-from capstone2020.srv import setArea
+from capstone2020.msg import GpsData
+from capstone2020.srv import SetArea
 
 class safeArea:
     def __init__(self):
         self.recieve = False
-        self.gpsData = gps_data()
+        self.gps_data = GpsData()
 
         self.width = 0
         self.height = 0
         self.radius = 0
 
-        rospy.Subscriber("/gps_data", gps_data, self.gpsCb)
+        rospy.Subscriber("/gps_data", GpsData, self.gpsCb)
 
-        self.set_area_client = rospy.ServiceProxy("set_area", setArea)
+        self.set_area_client = rospy.ServiceProxy("/set_area", SetArea)
 
-    def send_srv(self, shape, latitude, longtitude, width, height, radius):
-        rospy.wait_for_service('set_area')
+    def send_srv(self, shape, latitude, longitude, width, height, radius):
+        rospy.wait_for_service('/set_area')
 
-        resp = self.set_area_client(shape, latitude, longtitude, width, height, radius)
+        resp = self.set_area_client(shape, latitude, longitude, width, height, radius)
 
         if resp.result == True:
             rospy.loginfo("OK")
@@ -33,7 +33,7 @@ class safeArea:
 
     def gpsCb(self, msg):
         self.recieve = True
-        self.gpsData = msg
+        self.gps_data = msg
 
     def input_area(self):
         rospy.loginfo("shape of safe area[rec, cir]: ")
@@ -58,7 +58,7 @@ class safeArea:
             rospy.logerr("Input only number")
             return False
 
-        return self.send_srv(shape, self.gpsData.latitude, self.gpsData.longtitude, self.width, self.height, self.radius)
+        return self.send_srv(shape, self.gps_data.latitude, self.gps_data.longitude, self.width, self.height, self.radius)
 
 if __name__ == "__main__":
     rospy.init_node("set_area_node")
