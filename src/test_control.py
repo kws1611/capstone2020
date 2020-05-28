@@ -61,12 +61,27 @@ class control:
         self.output_ppm_pub = rospy.Publisher('/output_ppm', Ppm, queue_size= 1)
 
         rospy.Subscriber('/gps_data', GpsData, self.gps_cb)
-        rospy.Subscriber('/mavros/imu/data', Imu, self.imu_cb)
+        rospy.Subscriber("/pose_covariance",PoseWithCovarianceStamped, self.kalman_cb)
         rospy.Subscriber('/input_ppm', Ppm, self.ppm_cb)
-        
+
+        #rospy.Subscriber('/mavros/rc/in', RCIn, self.rc_in)
+        rospy.Subscriber('/mavros/imu/data', Imu, self.imu)
+        #self.out_rc = rospy.Publisher('/mavros/rc/override', OverrideRCIn, queue_size= 1)
+
         rospy.Service('/set_area', SetArea, self.area_cb)
 
-    def imu_cb(self, msg):
+    # rc cb
+    def rc_in(self, msg):
+        self.input_RC.channel_1 = msg.channels[0]
+        self.input_RC.channel_2 = msg.channels[1]
+        self.input_RC.channel_3 = msg.channels[2]
+        self.input_RC.channel_4 = msg.channels[3]
+        self.input_RC.channel_5 = msg.channels[4]
+        self.input_RC.channel_6 = msg.channels[5]
+        self.input_RC.channel_7 = msg.channels[6]
+        self.input_RC.channel_8 = msg.channels[7]
+
+    def imu(self, msg):
         self.pose_status = True
         
         self.q = [msg.orientation.w,
@@ -74,6 +89,21 @@ class control:
                 msg.orientation.y,
                 msg.orientation.z]
         
+    # rc out
+    '''
+    def rc_out(self, output_RC):
+        out = OverrideRCIn()
+        out.channels[0] = output_RC.channel_1
+        out.channels[1] = output_RC.channel_2
+        out.channels[2] = output_RC.channel_3
+        out.channels[3] = output_RC.channel_4
+        out.channels[4] = output_RC.channel_5
+        out.channels[5] = output_RC.channel_6
+        out.channels[6] = output_RC.channel_7
+        out.channels[7] = output_RC.channel_8
+
+        self.out_rc.publish(out)
+    '''
     # subscriber's callback function
     def gps_cb(self, msg):
         self.gps_status = True
@@ -84,6 +114,14 @@ class control:
 
         self.curLat_rad = msg.latitude * pi/180
         self.curLon_rad = msg.longitude * pi/180
+
+    def kalman_cb(self, msg):
+        self.pose_status = True
+
+        self.q = [msg.pose.pose.orientation.w,
+                msg.pose.pose.orientation.x,
+                msg.pose.pose.orientation.y,
+                msg.pose.pose.orientation.z]
 
     def ppm_cb(self, msg):
         self.input_RC = msg
@@ -189,8 +227,8 @@ class control:
             return False
 
     def controller_check(self):
-        roll_neutrality = abs(self.input_RC.channel_1 -1000) < 50
-        pitch_neutrality = abs(self.input_RC.channel_2 -1000) < 50
+        roll_neutrality = abs(self.input_RC.channel[0] -1500) < 50
+        pitch_neutrality = abs(self.input_RC.channel[1] -1500) < 50
         throtle_neutrality = self.input_RC.channel_3 > self.output_RC.channel_3
 
         return  (roll_neutrality and pitch_neutrality and throtle_neutrality)
@@ -252,7 +290,6 @@ class control:
         rospy.loginfo_throttle(1, "y: %d"%norm_body_y)
         rospy.loginfo_throttle(1, "tilt: %d"%tilt_value)
         '''
-
         ### PID loop for altitude value
         ######## error value used for throttle
         # error maximum value check!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
@@ -336,7 +373,7 @@ def inv_quat(q):
     return [q[0], -q[1], -q[2], -q[3]]
 
 if __name__ == "__main__":
-    rospy.init_node('test_control_rpi_node')
+    rospy.init_node('test_control_node')
 
     drone = control()
 
