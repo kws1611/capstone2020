@@ -189,8 +189,8 @@ class control:
             return False
 
     def controller_check(self):
-        roll_neutrality = abs(self.input_RC.channel[0] -1500) < 50
-        pitch_neutrality = abs(self.input_RC.channel[1] -1500) < 50
+        roll_neutrality = abs(self.input_RC.channel_1 -1000) < 50
+        pitch_neutrality = abs(self.input_RC.channel_2 -1000) < 50
         throtle_neutrality = self.input_RC.channel_3 > self.output_RC.channel_3
 
         return  (roll_neutrality and pitch_neutrality and throtle_neutrality)
