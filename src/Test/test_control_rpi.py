@@ -269,7 +269,7 @@ class control:
         output.channel_1 = x_tilt_value
         output.channel_2 = y_tilt_value
         output.channel_3 = throttle_value
-        output.channel_4 = 500
+        output.channel_4 = 1000
         output.channel_5 = self.input_RC.channel_5
         output.channel_6 = self.input_RC.channel_6
         output.channel_7 = self.input_RC.channel_7
