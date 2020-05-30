@@ -52,9 +52,7 @@ find_package(catkin REQUIRED COMPONENTS
 add_message_files(
   FILES
   GpsData.msg
-  ppm_msg.msg
   Ppm.msg
-#   Message2.msg
 )
 
 ## Generate services in the 'srv' folder

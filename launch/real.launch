@@ -1,0 +1,10 @@
+<launch>
+    <!--node name= "ppm input" pkg="capstone2020" type="ppm_reader.py" /-->
+    <!--node name= "ppm output" pkg="capstone2020" type="control_sender.py" /-->
+    <!--node name= "GPS reading" pkg="capstone2020" type="gps_node.py" /-->
+    <node name= "Kalman Filter" pkg="capstone2020" type="kalman_test.py" />
+    <node name= "getting_node" pkg="capstone2020" type="getting.py" />
+    <!--node name= "test_gps_node" pkg="capstone2020" type="test_gps_node.py" /-->
+    <node name= "test_real_node" pkg="capstone2020" type="test_real.py" output="screen" />
+    
+</launch>
