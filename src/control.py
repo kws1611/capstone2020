@@ -1,355 +1,324 @@
-#!/usr/bin/python
+#!/usr/bin/env python
 
 import rospy
-from geometry_msgs.msg import Vector3, Quaternion, PoseStamped, PoseWithCovarianceStamped
-from capstone2020.msg import ppm_msg, GpsData
+from geometry_msgs.msg import PoseWithCovarianceStamped
+from capstone2020.msg import GpsData, Ppm
 from capstone2020.srv import SetArea
-import numpy as np
-from numpy import matrix
-import time
-from math import atan2, asin, sqrt, cos, sin, tan, acos, pi
-import numpy.linalg as lin
-import tf
-
-"""
-quaternion to matrix
-1-2*q2**2 - 2*q3**2 , 2*q1*q2 - 2*q3*q0 , 2*q1*q3 + 2*q2*q0
-2*q1*q2 + 2*q3*q0 , 1 - 2*q1**2 - 2*q3**2 , 2*q3*q2 - 2*q1*q0
-2*q1*q3 - 2*q2*q0 , 2*q2*q3 + 2*q1*q0 , 1-2*q1**2 -2*q2**2
-"""
-
-def normalization(v1, v2, v3):
-        #making the vector size 1
-        norm = math.sqrt(v1**2 + v2**2 + v3**2)
-        out_1 = v1/sqrt(v1**2 + v2**2)
-        out_2 = v2/sqrt(v1**2 + v2**2)
-        out_3=  v3/norm
-        return out_1, out_2, out_3
-
-def calculating_rpy(q0,q1,q2,q3):
-    # calculating quaternion -> roll pitch yaw
-    # euler angle is based on x-y-z order
-    quaternion_norm = sqrt(q0**2 + q1**2 + q2**2 + q3**2)
-    q0 = q0 / quaternion_norm
-    q1 = q1 / quaternion_norm
-    q2 = q2 / quaternion_norm
-    q3 = q3 / quaternion_norm
-    roll = atan2((-2*q3*q2 + 2*q1*q0),(1-2*q1**2 -2*q2**2))
-    pitch = asin(2*q1*q3 + 2*q2*q0)
-    yaw = atan2((-2*q1*q2 + 2*q3*q0),(1-2*q2**2 - 2*q3**2))
-    return roll, pitch, yaw
+from math import sin, cos, pi, sqrt
 
 class control:
+    def __init__(self):
+        # Set safety area variables
+        self.areaSet = False
+
+        self.areaCenterLat, self.areaCenterLat_rad = None, None
+        self.areaCenterLon, self.areaCenterLon_rad = None, None
+
+        self.areaWidth = None; self.areaHeight = None; self.areaRadius = None
+        self.areaDeltaLat_rad = None; self.areaDeltaLon_rad = None
+        self.areaRangeGap = 10
+
+        self.earth_radius = None
+
+        self.pre_inout = True  
+        self.pre_hoveringSW = False
+        self.pre_auto_mode = False
+        self.auto_mode = False  # Auto mode
+        
+        # Set gps variables
+        self.gps_status = False
+        self.curLat, self.curLat_rad = None, None
+        self.curLon, self.curLon_rad = None, None
+        self.curAlt = None
+
+        # Set pose variables
+        self.pose_status = False
+
+        self.targetLat_rad = None
+        self.targetLon_rad = None
+        self.targetAlt = None
+
+        self.q = [None]*4  # w, x, y, z
+
+        self.time_sw = False
+        self.ref_time = None
+        self.dt = 0.05
+
+        # Set ppm variables
+        self.input_RC = Ppm()
+        self.output_RC = Ppm()
+        
+        # Set PID control variables
+        self.P_gain = 0.3
+        self.I_gain = 0.1
+        self.D_gain = 0.5
+        self.error_I = 0
+
+        # Declare publisher, subscriber and service server
+        self.output_ppm_pub = rospy.Publisher('/output_ppm', Ppm, queue_size= 1)
+
+        rospy.Subscriber('/gps_data', GpsData, self.gps_cb)
+        rospy.Subscriber('/pose_covariance', PoseWithCovarianceStamped, self.imu_cb)
+        rospy.Subscriber('/input_ppm', Ppm, self.ppm_cb)
+        
+        rospy.Service('/set_area', SetArea, self.area_cb)
+
+    def imu_cb(self, msg):
+        self.pose_status = True
+        
+        self.q = [msg.pose.pose.orientation.w,
+                msg.pose.pose.orientation.x,
+                msg.pose.pose.orientation.y,
+                msg.pose.pose.orientation.z]
+        
+    # subscriber's callback function
+    def gps_cb(self, msg):
+        self.gps_status = True
+
+        self.curLat = msg.latitude
+        self.curLon = msg.longitude
+        self.curAlt = msg.altitude
+
+        self.curLat_rad = msg.latitude * pi/180
+        self.curLon_rad = msg.longitude * pi/180
 
     def ppm_cb(self, msg):
-        self.ch1 = int(msg.channel_1)
-        self.ch2 = int(msg.channel_2)
-        self.ch3 = int(msg.channel_3)
-        self.ch4 = int(msg.channel_4)
-        self.ch5 = int(msg.channel_5)
-        self.ch6 = int(msg.channel_6)
-        self.ch7 = int(msg.channel_7)
-        self.ch8 = int(msg.channel_8)
-
-    def gps_cb(self, msg):
-        self.latitude = msg.latitude
-        self.longitude = msg.longitude
-        self.altitude = msg.altitude
-
-        self.in_out = self.range_check()
-
-    def range_check(self):
-        if self.shape == 1:
-            if self.target_longitude_min < self.longitude < self.target_longitude_max:
-                if self.target_latitude_min < self.latitude < self.target_latitude_max:
-                    return "in"
-                else:
-                    return "out"
-            else :
-                return "out"
-
-        elif self.shape == 2:
-            dx = (self.target_coordinate_lat - self.longitude)*6371000
-            dy = (self.target_coordinate_long - self.latitude)*6371000
-            radius = sqrt(dx^2 + dy^2)
-
-            if radius < self.target_radius:
-                return "in"
-            else:
-                return "out"
-
-    def kalman_cb(self, msg):
-        self.quat_x = msg.pose.pose.orientation.x
-        self.quat_y = msg.pose.pose.orientation.y
-        self.quat_z = msg.pose.pose.orientation.z
-        self.quat_w = msg.pose.pose.orientation.w
+        self.input_RC = msg
 
     def area_cb(self, req):
+        # Service callback
         self.areaSet = True
 
         self.shape = req.shape
 
-        self.target_coordinate_lat = req.latitude
-        self.target_coordinate_long = req.longitude
-        self.target_radius = req.radius
+        self.areaCenterLat = req.latitude; self.areaCenterLat_rad = req.latitude * pi/180
+        self.areaCenterLon = req.longitude; self.areaCenterLon_rad = req.longitude * pi/180
 
-        delta_lat, delta_lon = self.meter2deg(self.latitude, req.width, req.height)
+        self.areaWidth = req.width  # Unit(m)
+        self.areaHeight = req.height  # Unit(m)
+        self.areaRadius = req.radius  # Unit(m)
 
-        self.target_latitude_min =  self.target_coordinate_lat - delta_lat/2
-        self.target_latitude_max =  self.target_coordinate_lat + delta_lat/2
-
-        self.target_longitude_min = self.target_coordinate_long - delta_lon/2
-        self.target_longitude_max = self.target_coordinate_long + delta_lon/2
+        # Set inner rectangle range in rad
+        self.areaDeltaLat_rad = (self.areaHeight - 2*self.areaRangeGap) / self.earth_radius 
+        self.areaDeltaLon_rad = (self.areaWidth - 2*self.areaRangeGap) / (self.earth_radius * cos(self.areaCenterLat_rad))
 
         return self.areaSet
 
-    def meter2deg(self, lat, width, height):
-        R_long = 6378137 # unit: meter
-        R_short = 6356752 # unit: meter
+    def ppm_pub(self, output_RC):
+        output_RC.header.stamp = rospy.Time.now()
+        self.output_ppm_pub.publish(output_RC)
 
-        R = sqrt(((R_long**2 * cos(lat * pi/180))**2 + (R_short**2 * sin(lat * pi/180))**2)/
-               ((R_long * cos(lat * pi/180))**2 + (R_short * sin(lat * pi/180))**2))
+    def hoveringSW_check(self):
+        if 200 < self.input_RC.channel_7 < 700:
+            self.auto_mode = True
+            return True
+        else:
+            return False
 
-        delta_lat = height/R*180/pi         # x , earth radius , radian to degree , degree to minute
-        delta_lon = width/(R * cos(lat*pi/180))*180/pi          # d = degree, m = minute , latitude and longitude = ddmm.mmmm format
+    def inout_check(self):
+        # in = True, out = False
+        dist_x = self.earth_radius * cos(self.areaCenterLat_rad) * (self.areaCenterLon_rad - self.curLon_rad)
+        dist_y = self.earth_radius * (self.areaCenterLat_rad - self.curLat_rad)
 
-        return delta_lat, delta_lon
-    
-    def deg2meter(self, lat, del_lat, del_lon):
-        # changing degree difference to meter
-        # lontitude -> X axis
-        # latitude -> Y axis
+        if self.shape == 1:  # Rectangle
+            if (abs(dist_x) < self.areaWidth/2) and (abs(dist_y) < self.areaHeight/2):
+                return True
+            else:
+                return False
 
-        ########################################################## lat = home position???
+        else:  # Circle
+            if sqrt(dist_x**2 + dist_y**2) < self.areaRadius:
+                return True
+            else:
+                return False
 
-        R_long = 6378137 # unit: meter
-        R_short = 6356752 # unit: meter
+    def set_target(self, inout, hoveringSW):
+        # Hovering SW 
+        if (self.pre_hoveringSW == False) and (hoveringSW == True):
+            self.targetLat_rad = self.curLat_rad
+            self.targetLon_rad = self.curLon_rad
+            self.targetAlt = self.curAlt
+            self.targetThrottle = self.input_RC.channel_3
 
-        R = sqrt(((R_long**2 * cos(lat * pi/180))**2 + (R_short**2 * sin(lat * pi/180))**2)/
-               ((R_long * cos(lat * pi/180))**2 + (R_short * sin(lat * pi/180))**2))
+            return
 
-        meter_X = del_lat*R*pi/180
-        meter_Y = del_lon*(R*cos(lat*pi/180))*pi/180
+        # When get out of safety area
+        if (self.pre_inout == True) and (inout == False) and (self.pre_auto_mode == False) and (self.auto_mode == True):
+            minLat = self.areaCenterLat_rad - self.areaDeltaLat_rad/2
+            maxLat = self.areaCenterLat_rad + self.areaDeltaLat_rad/2
+            minLon = self.areaCenterLon_rad - self.areaDeltaLon_rad/2
+            maxLon = self.areaCenterLon_rad + self.areaDeltaLon_rad/2
 
-        return meter_X, meter_Y
-    
-    def rotation_matrix(self,roll, pitch, yaw):
-        # rotation matrix changing from global to drone frame
-        # X Y Z rotation matrix
-        return matrix([[1,0,0],[0, cos(roll), -sin(roll)],[0, sin(roll), cos(roll)]])*matrix([[cos(pitch), 0 , sin(pitch)],[0, 1, 0],[-sin(pitch), 0, cos(pitch)]])*matrix([[cos(yaw), -sin(yaw), 0],[sin(yaw), cos(yaw), 0],[0, 0, 1]])
+            if self.shape == 1:  # Rectangle
+                self.targetLat_rad = max(minLat, min(maxLat, self.curLat_rad))
+                self.targetLon_rad = max(minLon, min(maxLon, self.curLon_rad))
+                self.targetAlt = self.curAlt
 
-    def quat_to_matrix(self,w,x,y,z):
-        # changing quaternion to rotation matrix
-        return matrix([[(1-2*y**2-2*z**2), (2*x*y + 2*w*z), (2*x*z - 2*w*y)],[(2*x*y - 2*w*z), (1-2*x**2-2*z**2),(2*y*z + 2*w*x)],[(2*x*z + 2*w*y),(2*y*z - 2*w*x),(1-2*x**2 -2*y**2)]])
+            else:  # Circle
+                self.targetLat_rad = self.curLat_rad + (self.areaCenterLat_rad - self.curLat_rad) * self.areaRangeGap/self.areaRadius
+                self.targetLon_rad = self.curLon_rad + (self.areaCenterLon_rad - self.curLon_rad) * self.areaRangeGap/self.areaRadius
+                self.targetAlt = self.curAlt
 
-    def __init__(self):
-        # Safety area
-        self.areaSet = False
-
-        self.shape = None
-
-        self.target_coordinate_lat = None
-        self.target_coordinate_long = None
-        self.radius = None
-
-        self.latitude = 0
-        self.longitude = 0
-        self.altitude = 0
-        self.in_out = "in"
-        self.in_out_switch = True   # True = in Faluse = out
-        self.hovering_switch = False  #True = hovering , False = radio control
-        self.hov_first_switch = True #True -> False = is the time when changing the ch6 value to hovering 
+            self.targetThrottle = self.input_RC.channel_3
         
-        self.kp = 5
-        self.ki = 0.01
-        self.kd = 0.01
-        self.dt = 1.0/50
+    def reach_check(self, d, _range = 4):
+        if (d < _range):
+            if(self.time_sw is False):
+                self.ref_time = rospy.Time.now()
+                self.time_sw = True
 
-        self.error_maximum = 5
-        self.error_I = 0
-        self.backup_ch3 = 400
+            if(rospy.Time.now() - self.ref_time > rospy.Duration(3.0)):
+                self.time_sw = True
+                return True
 
-        self.ch1,self.ch2,self.ch3,self.ch4,self.ch5,self.ch6,self.ch7,self.ch8 = 1000,1000,1000,1000,1000,1000,1000,1000
-        self.quat_w,self.quat_x,self.quat_y,self.quat_z = 1,0,0,0
-        self.control_ch1, self.control_ch2, self.control_ch3, self.control_ch4 = 0.0, 0.0, 0.0, 0.0
-        self.I_time = time.time()
-        self.des_global_x, self.des_global_y, self.des_global_z = 0.0, 0.0, 0.0
-        self.des_body_x, self.des_body_y, self.des_body_z = 0.0, 0.0, 0.0
+            else:
+                return False
 
-        self.back_up_switch = True
-        self.back_switch = True
-        self.back_up_ch1, self.back_up_ch2, self.back_up_ch3, self.back_up_ch4 = 0.0, 0.0, 0.0, 0.0
+        else:
+            self.time_sw = False
+            return False
 
-        # target position put here
-        self.target_latitude_min = 0
-        self.target_latitude_max = 0
-        self.target_longitude_min = 0
-        self.target_longitude_max = 0
-        self.target_altitude = 10
-        self.dist_sq = sqrt((self.target_latitude_max-self.target_latitude_min)**2 + (self.target_longitude_max-self.target_longitude_min)**2)
+    def controller_check(self):
+        roll_neutrality = abs(self.input_RC.channel_1 -1000) < 100
+        pitch_neutrality = abs(self.input_RC.channel_2 -1000) < 100
+        throtle_neutrality = self.input_RC.channel_3 > self.output_RC.channel_3 - 150
 
-        # Subscriber created
-        rospy.Subscriber("/input_ppm", ppm_msg, self.ppm_cb)
-        rospy.Subscriber("/gps_data", GpsData, self.gps_cb)
-        rospy.Subscriber("/pose_covariance",PoseWithCovarianceStamped, self.kalman_cb)
-        self.controling_pub = rospy.Publisher("/control_signal", ppm_msg, queue_size=1)
-        rospy.Service('set_area', SetArea, self.area_cb)
-
-        # home position below
-        self.target_coordinate_lat = (self.target_latitude_min + self.target_latitude_max)/2
-        self.target_coordinate_long = (self.target_longitude_max + self.target_longitude_min)/2
-
-    def cheching_Hovering_switch(self):
-        if self.ch5 > 1300 :
-            self.hovering_switch = True
-            if self.hov_first_switch:
-                # target the point to hover
-                # the point when switch off -> switch on
-                self.hov_back_up_X = self.longitude
-                self.hov_back_up_Y = self.latitude
-                self.hov_back_up_Z = self.altitude
-                self.hov_first_switch = False
-        else :
-            self.hovering_switch = False
-            self.hov_first_switch = True
-
-    def checking_state(self):
-        # checking state from current_state -> home position
-        self.d3_error, self.norm_body_x, self.norm_body_y = self.calculating_distance_error(self.target_coordinate_long, self.target_coordinate_lat,self.back_up_altitude)
-        if self.back_switch:
-            if self.in_out == "out":
-                self.back_up_switch = True
-                self.in_out_switch = False
-
-        if self.back_up_switch:
-            self.back_up_ch1 = self.ch1
-            self.back_up_ch2 = self.ch2
-            self.back_up_ch3 = self.ch3
-            self.back_up_ch4 = self.ch4
-            self.back_up_switch = False
-            self.back_up_altitude = self.altitude
-
-        if self.in_out =="in":
-            self.back_switch = True
-            if (not self.in_out_switch) and (self.d3_error < 0.3):
-                self.in_out_switch = True
-
-    def calculating_distance_error(self, X, Y, Z):
-        # calcculating the vector from drone to targeted position (global)
-        del_lat = self.latitude - X
-        del_lon = self.longitude - Y
-        del_meter_X, del_meter_Y = self.deg2meter(self.target_coordinate_lat, del_lat, del_lon)
-
-        self.des_global_x = del_meter_X
-        self.des_global_y = del_meter_Y
-        self.des_global_z = -Z + self.altitude
+        return  (roll_neutrality and pitch_neutrality and throtle_neutrality)
         
-        # changing global vector to body frame vector
-        ([[self.des_body_x],[self.des_body_y],[self.des_body_z]]) = (self.quat_to_matrix(self.quat_w,self.quat_x,self.quat_y,self.quat_z))*matrix([[self.des_global_x],[self.des_global_y],[self.des_global_z]])
+    def auto_control(self, targetLat_rad, targetLon_rad, targetAlt, q, hoveringSW):
+        ##################### dt has to be added##################################3
+        dist_x = (self.earth_radius * (self.targetLat_rad - self.curLat_rad))
+        dist_y = -(self.earth_radius * cos(self.curLat_rad) * (self.targetLon_rad - self.curLon_rad))
+        dist_z = self.targetAlt - self.curAlt
+
+        d_xyz = sqrt(dist_x**2 + dist_y**2 + dist_z**2)
+        d_xy = sqrt(dist_x**2 + dist_y**2)
+
+        body_dist = quat_mult(inv_quat([q[0], 0, 0, q[3]]), quat_mult([0, dist_x, dist_y, dist_z], [q[0], 0, 0, q[3]]))
         
-        # normalize the vector to size 1 to calculate the roll pitch yaw
-        self.norm_body_x, self.norm_body_y, self.norm_body_z = normalization(self.des_body_x,self.des_body_y,self.des_body_z)
-
-        # pid loop error calculation part
-        self.d2_dist = sqrt(self.des_global_x**2 + self.des_global_y**2)
-        self.d3_dist = sqrt(self.d2_dist**2 + self.des_global_z**2)
-
-        # making the drone to come into 2m more
-        if self.dist_sq < 5:
-            self.d3_error = self.d3_dist
-        else :
-            # calculating the safe distance = 2m when distance of box's radius is over 5m
-            self.d3_error = self.d3_dist - self.dist_sq + 2
-
-        return self.d3_error, self.norm_body_x, self.norm_body_y
-
-
-    def desired_accelation(self, X, Y, Z):
-        # calculating the error value and vector value 
-        # from current drone coordinate -> target corrdinate(home or hovering)
-        self.d3_error, self.norm_body_x, self.norm_body_y = self.calculating_distance_error(X, Y, Z)
-
+        body_dist_x = body_dist[1]
+        body_dist_y = body_dist[2]
+        
+        if(d_xy != 0):
+            norm_body_x = body_dist_x / sqrt(body_dist_x**2 + body_dist_y**2)
+            norm_body_y = body_dist_y / sqrt(body_dist_x**2 + body_dist_y**2)
+        else:
+            norm_body_x =0.0
+            norm_body_y =0.0
+        
         ### PID loop for roll and pitch value
         # I loop
-        self.error_I += self.ki*self.d3_error*self.dt
+        self.error_I += self.I_gain*d_xyz*self.dt
 
         # making the I term not go over -1~1
-        if self.error_I > 1 :
-            self.error_I = 1
-        elif self.error_I < -1:
-            self.error_I = -1
-        else :
-            pass
+        self.error_I = max(-1, min(self.error_I, 1))
 
-        self.error_value = self.kp*self.d3_error + self.error_I  
+        error_value = self.P_gain*d_xyz + self.error_I
         # calculating the tilt value to tilt roll and pitch
         # error value is divided by error maximum to make slower 
-        # error maximum value = 5m
-        self.tilt_value = self.error_value/self.error_maximum*500
+        # error maximum value = 5m   !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+        tilt_value = error_value/5*500
         
         # tilt value is between -500~500
-        if self.tilt_value > 500:
-            self.tilt_value = 500
-        elif self.tilt_value < -500:
-            self.tilt_value = -500
-        else :
-            pass
-        
-        self.x_tilt_value = -(self.norm_body_y*self.tilt_value)+1500
-        self.y_tilt_value = +(self.norm_body_x*self.tilt_value)+1500
+        tilt_value = max(-500,min(tilt_value,500))
+        x_tilt_value = 1000 -(norm_body_x*tilt_value)
+        y_tilt_value = 1000 +(norm_body_y*tilt_value)
+
+        rospy.loginfo_throttle(1, "x: %d"%dist_x)
+        rospy.loginfo_throttle(1, "y: %d"%dist_y)
+        rospy.loginfo_throttle(1, "z: %d"%dist_z)
 
         ### PID loop for altitude value
         ######## error value used for throttle
-        self.throttle_value = self.backup_ch3 + self.error_value/self.error_maxium*100
+        # error maximum value check!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+        throttle_value = self.targetThrottle + dist_z*200
 
         # throttle value is between 350~1800
-        if self.throttle_value > 1800:
-            self.throttle_value = 1800
-        elif self.throttle_value < 350:
-            self.throttle_value = 350
-        else :
-            pass
+        throttle_value = max(550, min(throttle_value, 1400))
+
+        # Reach check
+        if(self.reach_check(d_xy) and (hoveringSW is False) and self.controller_check()):
+            self.error_I = 0
+            self.auto_mode = False
+
+        output = Ppm()
         
-        return self.x_tilt_value, self.y_tilt_value, self.throttle_value
+        output.channel_1 = x_tilt_value
+        output.channel_2 = y_tilt_value
+        output.channel_3 = throttle_value
+        output.channel_4 = 1000
+        output.channel_5 = self.input_RC.channel_5
+        output.channel_6 = self.input_RC.channel_6
+        output.channel_7 = self.input_RC.channel_7
+        output.channel_8 = self.input_RC.channel_8
 
-    def controling_process(self):
-        self.channel_msg = ppm_msg()
-        self.channel_msg.header.stamp.secs = time.time()
-        self.checking_state()
-        self.cheching_Hovering_switch()
-        if (not self.hovering_switch) and self.in_out_switch:
-            self.channel_msg.channel_1 = self.ch1
-            self.channel_msg.channel_2 = self.ch2
-            self.channel_msg.channel_3 = self.ch3
-            self.channel_msg.channel_4 = self.ch4 
+        return output
 
-        elif self.hovering_switch and self.in_out_switch:
-            self.control_ch1, self.control_ch2, self.control_ch3 = self.desired_accelation(self.hov_back_up_X, self.hov_back_up_Y, self.hov_back_up_Z)
-            self.channel_msg.channel_1 = self.control_ch1
-            self.channel_msg.channel_2 = self.control_ch2
-            self.channel_msg.channel_3 = self.control_ch3
-            self.channel_msg.channel_4 = 1500
+    def process(self):
+        if (self.gps_status is True) and (self.pose_status is True):
+            R_long = 6378137 # unit: meter
+            R_short = 6356752 # unit: meter
+            lat = self.curLat_rad
 
-        else :
-            self.control_ch1, self.control_ch2, self.control_ch3 = self.desired_accelation(self.target_coordinate_long, self.target_coordinate_lat, self.back_up_altitude)
-            self.channel_msg.channel_1 = self.control_ch1
-            self.channel_msg.channel_2 = self.control_ch2
-            self.channel_msg.channel_3 = self.control_ch3
-            self.channel_msg.channel_4 = 1500
-        self.channel_msg.channel_5 = self.ch5
-        self.channel_msg.channel_6 = self.ch6
-        self.channel_msg.channel_7 = self.ch7
-        self.channel_msg.channel_8 = self.ch8
-        self.controling_pub.publish(self.channel_msg)
+            self.earth_radius = sqrt(((R_long * cos(lat * pi/180))**2 + (R_short * sin(lat * pi/180))**2))
+
+            # Check channel 7 Switch
+            hoveringSW = self.hoveringSW_check()
+            if hoveringSW is True:
+                self.auto_mode = True
+
+            # Safety area setting check
+            # If the location of drone is in of range, inout = True
+            if self.areaSet is True:
+                rospy.loginfo_once("area set: %d"%self.areaSet)
+                inout = self.inout_check()
+                if inout is False:
+                    self.auto_mode = True
+                    
+            else:
+                inout = True
+            rospy.loginfo_throttle(1, "inout: %d"%inout)
+            
+        else:
+            self.auto_mode = False
+
+        # If safety area were not setted output_RC = input_RC
+        # If out range or auto_mode ouput_RC = auto_control
+        if self.auto_mode is False:
+            self.output_RC = self.input_RC
+        else:
+            self.set_target(inout, hoveringSW)
+            self.output_RC = self.auto_control(self.targetLat_rad, self.targetLon_rad, self.targetAlt, self.q, hoveringSW)
+
+            self.pre_inout = inout
+            self.pre_hoveringSW = hoveringSW
+            self.pre_auto_mode == self.auto_mode 
+
+        rospy.loginfo_throttle(1, "auto_mode: %d"%self.auto_mode)
+
+        self.output_RC.header.stamp = rospy.Time.now()
+        self.output_ppm_pub.publish(self.output_RC)
+
+def quat_mult(q1, q2):
+        q = [0]*4
+
+        q[0] = q1[0]*q2[0] - q1[1]*q2[1] - q1[2]*q2[2] - q1[3]*q2[3]
+        q[1] = q1[0]*q2[1] + q1[1]*q2[0] + q1[2]*q2[3] - q1[3]*q2[2]
+        q[2] = q1[0]*q2[2] + q1[2]*q2[0] + q1[3]*q2[1] - q1[1]*q2[3] 
+        q[3] = q1[0]*q2[3] + q1[3]*q2[0] + q1[1]*q2[2] - q1[2]*q2[1] 
+
+        return q
+
+def inv_quat(q):
+    return [q[0], -q[1], -q[2], -q[3]]
 
 if __name__ == "__main__":
-    rospy.init_node("controlling_node", anonymous=True)
-    rospy.loginfo("control node initialized")
-    try:
-        rospy.loginfo("controling start!")
-        drone_control = control()
-        while not rospy.is_shutdown():
-            drone_control.controling_process()
-    except rospy.ROSInterruptException:
-        print "ROS terminated"
-        pass
+    rospy.init_node('control_node')
+
+    drone = control()
+
+    rate = rospy.Rate(50)
+    while not rospy.is_shutdown():
+        drone.process()
+        
+        rate.sleep()

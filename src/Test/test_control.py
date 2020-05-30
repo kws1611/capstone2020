@@ -6,17 +6,7 @@ from capstone2020.msg import GpsData, Ppm
 from capstone2020.srv import SetArea
 from math import sin, cos, pi, sqrt
 
-from mavros_msgs.msg import RCIn
-from mavros_msgs.msg import OverrideRCIn
 from sensor_msgs.msg import Imu
-
-def rotateVectorQuaternion(x, y, z, q0, q1, q2, q3):
-        #rotate vector using quaternion
-        
-        vx = ((q0 * q0 + q1 * q1 - q2 * q2 - q3 * q3) * (x) + 2 * (q1 * q2 - q0 * q3) * y + 2 * (q1 * q3 + q0 * q2) * z)
-        vy = (2 * (q1 * q2 + q0 * q3) * x + (q0 * q0 - q1 * q1 + q2 * q2 - q3 * q3) * y + 2 * (q2 * q3 - q0 * q1) * z)
-        vz = (2 * (q1 * q3 - q0 * q2) * x + 2 * (q2 * q3 + q0 * q1) * y + (q0 * q0 - q1 * q1 - q2 * q2 + q3 * q3) * z)
-        return vx,vy,vz
 
 class control:
     def __init__(self):
@@ -34,6 +24,7 @@ class control:
 
         self.pre_inout = True  
         self.pre_hoveringSW = False
+        self.pre_auto_mode = False
         self.auto_mode = False  # Auto mode
         
         # Set gps variables
@@ -60,7 +51,7 @@ class control:
         self.output_RC = Ppm()
         
         # Set PID control variables
-        self.P_gain = 1
+        self.P_gain = 0.3
         self.I_gain = 0.1
         self.D_gain = 0.5
         self.error_I = 0
@@ -69,15 +60,10 @@ class control:
         self.output_ppm_pub = rospy.Publisher('/output_ppm', Ppm, queue_size= 1)
 
         rospy.Subscriber('/gps_data', GpsData, self.gps_cb)
-        #rospy.Subscriber('/mavros/imu/data', Imu, self.imu_cb)
-        rospy.Subscriber('/pose_covariance',PoseWithCovarianceStamped, self.Kalman_cb)  # for Real Testing
+        rospy.Subscriber('/mavros/imu/data', Imu, self.imu_cb)
         rospy.Subscriber('/input_ppm', Ppm, self.ppm_cb)
         
         rospy.Service('/set_area', SetArea, self.area_cb)
-
-    def Kalman_cb(self,msg):
-        # Global -> body frame
-        self.q = [msg.pose.pose.orientation.w,msg.pose.pose.orientation.x,msg.pose.pose.orientation.y,msg.pose.pose.orientation.z]
 
     def imu_cb(self, msg):
         self.pose_status = True
@@ -114,25 +100,16 @@ class control:
         self.areaHeight = req.height  # Unit(m)
         self.areaRadius = req.radius  # Unit(m)
 
-        # Set Earth Radius
-        R_long = 6378137 # unit: meter
-        R_short = 6356752 # unit: meter
-        lat = self.areaCenterLat_rad
-
-        self.earth_radius = sqrt(((R_long * cos(lat * pi/180))**2 + (R_short * sin(lat * pi/180))**2))
-
         # Set inner rectangle range in rad
         self.areaDeltaLat_rad = (self.areaHeight - 2*self.areaRangeGap) / self.earth_radius 
         self.areaDeltaLon_rad = (self.areaWidth - 2*self.areaRangeGap) / (self.earth_radius * cos(self.areaCenterLat_rad))
 
         return self.areaSet
 
-    '''
     def ppm_pub(self, output_RC):
         output_RC.header.stamp = rospy.Time.now()
         self.output_ppm_pub.publish(output_RC)
-    '''
-    
+
     def hoveringSW_check(self):
         if 200 < self.input_RC.channel_7 < 700:
             self.auto_mode = True
@@ -142,12 +119,9 @@ class control:
 
     def inout_check(self):
         # in = True, out = False
-        dist_x = (self.earth_radius * (self.targetLat_rad - self.curLat_rad))
-        dist_y = -(self.earth_radius * cos(self.curLat_rad) * (self.targetLon_rad - self.curLon_rad))
-        '''
         dist_x = self.earth_radius * cos(self.areaCenterLat_rad) * (self.areaCenterLon_rad - self.curLon_rad)
         dist_y = self.earth_radius * (self.areaCenterLat_rad - self.curLat_rad)
-        '''
+
         if self.shape == 1:  # Rectangle
             if (abs(dist_x) < self.areaWidth/2) and (abs(dist_y) < self.areaHeight/2):
                 return True
@@ -171,7 +145,7 @@ class control:
             return
 
         # When get out of safety area
-        if (self.pre_inout == True) and (inout == False) and (hoveringSW == False):
+        if (self.pre_inout == True) and (inout == False) and (self.pre_auto_mode == False) and (self.auto_mode == True):
             minLat = self.areaCenterLat_rad - self.areaDeltaLat_rad/2
             maxLat = self.areaCenterLat_rad + self.areaDeltaLat_rad/2
             minLon = self.areaCenterLon_rad - self.areaDeltaLon_rad/2
@@ -181,28 +155,27 @@ class control:
                 self.targetLat_rad = max(minLat, min(maxLat, self.curLat_rad))
                 self.targetLon_rad = max(minLon, min(maxLon, self.curLon_rad))
                 self.targetAlt = self.curAlt
-                self.targetThrottle = self.input_RC.channel_3
 
             else:  # Circle
                 self.targetLat_rad = self.curLat_rad + (self.areaCenterLat_rad - self.curLat_rad) * self.areaRangeGap/self.areaRadius
                 self.targetLon_rad = self.curLon_rad + (self.areaCenterLon_rad - self.curLon_rad) * self.areaRangeGap/self.areaRadius
                 self.targetAlt = self.curAlt
-                self.targetThrottle = self.input_RC.channel_3
+
+            self.targetThrottle = self.input_RC.channel_3
         
-    def reach_check(self, d, _range = 2.5):
+    def reach_check(self, d, _range = 4):
         if (d < _range):
-            return True
-            '''
             if(self.time_sw is False):
                 self.ref_time = rospy.Time.now()
-            
-            if(rospy.Time.now() - self.ref_time > rospy.Duration(5.0)):
+                self.time_sw = True
+
+            if(rospy.Time.now() - self.ref_time > rospy.Duration(3.0)):
                 self.time_sw = True
                 return True
 
             else:
                 return False
-            '''
+
         else:
             self.time_sw = False
             return False
@@ -210,39 +183,25 @@ class control:
     def controller_check(self):
         roll_neutrality = abs(self.input_RC.channel_1 -1000) < 100
         pitch_neutrality = abs(self.input_RC.channel_2 -1000) < 100
-        throtle_neutrality = self.input_RC.channel_3 > self.output_RC.channel_3-150
+        throtle_neutrality = self.input_RC.channel_3 > self.output_RC.channel_3 - 150
 
         return  (roll_neutrality and pitch_neutrality and throtle_neutrality)
         
     def auto_control(self, targetLat_rad, targetLon_rad, targetAlt, q, hoveringSW):
-        R_long = 6378137 # unit: meter
-        R_short = 6356752 # unit: meter
-        lat = self.curLat_rad
-
-        self.earth_radius = sqrt(((R_long * cos(lat * pi/180))**2 + (R_short * sin(lat * pi/180))**2))
+        ##################### dt has to be added##################################3
         dist_x = (self.earth_radius * (self.targetLat_rad - self.curLat_rad))
         dist_y = -(self.earth_radius * cos(self.curLat_rad) * (self.targetLon_rad - self.curLon_rad))
-        dist_z = self.curAlt - self.targetAlt 
+        dist_z = self.targetAlt - self.curAlt
 
-        d = sqrt(dist_x**2 + dist_y**2 + dist_z**2)
+        d_xyz = sqrt(dist_x**2 + dist_y**2 + dist_z**2)
+        d_xy = sqrt(dist_x**2 + dist_y**2)
 
-        rospy.loginfo_throttle(1, "x: %d"%dist_x)
-        rospy.loginfo_throttle(1, "y: %d"%dist_y)
-        rospy.loginfo_throttle(1, "z: %d"%dist_z)
-
-        body_dist_x,body_dist_y,body_dist_z = rotateVectorQuaternion(dist_x, dist_y, dist_z,q[0], q[1], q[2], q[3])
-
-        #body_dist = quat_mult(inv_quat([q[0], q[1], q[2], q[3]]), quat_mult([dist_x, dist_y, dist_z,0], [q[0], q[1], q[2], q[3]]))
-        '''
+        body_dist = quat_mult(inv_quat([q[0], 0, 0, q[3]]), quat_mult([0, dist_x, dist_y, dist_z], [q[0], 0, 0, q[3]]))
+        
         body_dist_x = body_dist[1]
         body_dist_y = body_dist[2]
-        body_dist_z = body_dist[3]
         
-        rospy.loginfo_throttle(1, "bx: %d"%body_dist[1])
-        rospy.loginfo_throttle(1, "by: %d"%body_dist[2])
-        rospy.loginfo_throttle(1, "bz: %d"%body_dist[3])
-        '''
-        if(body_dist_x**2 + body_dist_y**2 > 0.01):
+        if(d_xy != 0):
             norm_body_x = body_dist_x / sqrt(body_dist_x**2 + body_dist_y**2)
             norm_body_y = body_dist_y / sqrt(body_dist_x**2 + body_dist_y**2)
         else:
@@ -251,12 +210,12 @@ class control:
         
         ### PID loop for roll and pitch value
         # I loop
-        self.error_I += self.I_gain*d*self.dt
+        self.error_I += self.I_gain*d_xyz*self.dt
 
         # making the I term not go over -1~1
         self.error_I = max(-1, min(self.error_I, 1))
 
-        error_value = self.P_gain*d + self.error_I
+        error_value = self.P_gain*d_xyz + self.error_I
         # calculating the tilt value to tilt roll and pitch
         # error value is divided by error maximum to make slower 
         # error maximum value = 5m   !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
@@ -264,23 +223,28 @@ class control:
         
         # tilt value is between -500~500
         tilt_value = max(-500,min(tilt_value,500))
-        x_tilt_value = 1000 -(norm_body_y*tilt_value)
-        y_tilt_value = 1000 -(norm_body_x*tilt_value)
+        x_tilt_value = 1000 -(norm_body_x*tilt_value)
+        y_tilt_value = 1000 +(norm_body_y*tilt_value)
+
+        rospy.loginfo_throttle(1, "x: %d"%dist_x)
+        rospy.loginfo_throttle(1, "y: %d"%dist_y)
+        rospy.loginfo_throttle(1, "z: %d"%dist_z)
 
         ### PID loop for altitude value
         ######## error value used for throttle
         # error maximum value check!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-        throttle_value = self.targetThrottle + error_value/5*10
+        throttle_value = self.targetThrottle + dist_z*200
 
         # throttle value is between 350~1800
         throttle_value = max(550, min(throttle_value, 1400))
 
         # Reach check
-        d2_value = dist_x**2 + dist_y**2
-        if(self.reach_check(d2_value) and not(hoveringSW)):
+        if(self.reach_check(d_xy) and (hoveringSW is False) and self.controller_check()):
+            self.error_I = 0
             self.auto_mode = False
 
         output = Ppm()
+        
         output.channel_1 = x_tilt_value
         output.channel_2 = y_tilt_value
         output.channel_3 = throttle_value
@@ -289,10 +253,17 @@ class control:
         output.channel_6 = self.input_RC.channel_6
         output.channel_7 = self.input_RC.channel_7
         output.channel_8 = self.input_RC.channel_8
+
         return output
 
     def process(self):
-        if (self.gps_status is True): #and (self.pose_status is True):
+        if (self.gps_status is True) and (self.pose_status is True):
+            R_long = 6378137 # unit: meter
+            R_short = 6356752 # unit: meter
+            lat = self.curLat_rad
+
+            self.earth_radius = sqrt(((R_long * cos(lat * pi/180))**2 + (R_short * sin(lat * pi/180))**2))
+
             # Check channel 7 Switch
             hoveringSW = self.hoveringSW_check()
             if hoveringSW is True:
@@ -300,13 +271,12 @@ class control:
 
             # Safety area setting check
             # If the location of drone is in of range, inout = True
-            if self.areaSet:
+            if self.areaSet is True:
                 rospy.loginfo_once("area set: %d"%self.areaSet)
                 inout = self.inout_check()
-                if not inout:
+                if inout is False:
                     self.auto_mode = True
-                else :
-                    self.auto_mode = False
+                    
             else:
                 inout = True
             rospy.loginfo_throttle(1, "inout: %d"%inout)
@@ -320,19 +290,11 @@ class control:
             self.output_RC = self.input_RC
         else:
             self.set_target(inout, hoveringSW)
-
-            rospy.loginfo_once("out Lat: %.6f"%self.curLat)
-            rospy.loginfo_once("out Lon: %.6f"%self.curLon)
-            rospy.loginfo_once("out Alt: %.1f"%self.curAlt)
-
-            rospy.loginfo_once("target Lat: %.6f"%(self.targetLat_rad * 180/pi))
-            rospy.loginfo_once("target Lon: %.6f"%(self.targetLon_rad * 180/pi))
-            rospy.loginfo_once("target Alt: %.1f"%self.targetAlt)
-
             self.output_RC = self.auto_control(self.targetLat_rad, self.targetLon_rad, self.targetAlt, self.q, hoveringSW)
 
             self.pre_inout = inout
             self.pre_hoveringSW = hoveringSW
+            self.pre_auto_mode == self.auto_mode 
 
         rospy.loginfo_throttle(1, "auto_mode: %d"%self.auto_mode)
 
@@ -353,7 +315,7 @@ def inv_quat(q):
     return [q[0], -q[1], -q[2], -q[3]]
 
 if __name__ == "__main__":
-    rospy.init_node('test_control_rpi_node')
+    rospy.init_node('test_control_node')
 
     drone = control()
 

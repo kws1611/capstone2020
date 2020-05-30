@@ -57,7 +57,6 @@ class X:
         self.ch7 = int(self.ppm_input_msg.channel_7)
         self.ch8 = int(self.ppm_input_msg.channel_8)
 
-
     def _update(self):
         wf = []
         micros = 0

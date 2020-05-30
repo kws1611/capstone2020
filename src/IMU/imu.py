@@ -291,7 +291,7 @@ class kalman_Filter:
 
 if __name__ == "__main__":
 
-        rospy.init_node("Kalman_Filter", anonymous=True)
+        rospy.init_node("imu_node", anonymous=True)
         rospy.loginfo("Kalman filter node initialized")
 
         try:
