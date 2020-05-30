@@ -83,6 +83,5 @@ if __name__ == "__main__":
             p1.reading_process()
         
     except rospy.ROSInterruptException:
-        print "ROS terminated"
         pass
     pi.stop()
