@@ -213,8 +213,8 @@ class control:
 
         self.earth_radius = sqrt(((R_long * cos(lat * pi/180))**2 + (R_short * sin(lat * pi/180))**2))
         ##################### dt has to be added##################################3
-        dist_x = (self.earth_radius * (-self.targetLat_rad + self.curLat_rad))
-        dist_y = -(self.earth_radius * cos(self.curLat_rad) * (-self.targetLon_rad + self.curLon_rad))
+        dist_x = (self.earth_radius * (self.targetLat_rad - self.curLat_rad))
+        dist_y = -(self.earth_radius * cos(self.curLat_rad) * (self.targetLon_rad - self.curLon_rad))
         dist_z = self.curAlt - self.targetAlt 
 
         d = sqrt(dist_x**2 + dist_y**2 + dist_z**2)
@@ -235,7 +235,7 @@ class control:
         rospy.loginfo_throttle(1, "by: %d"%body_dist[2])
         rospy.loginfo_throttle(1, "bz: %d"%body_dist[3])
         '''
-        if(body_dist_x**2 + body_dist_y**2 > 0.01):
+        if(body_dist_x**2 + body_dist_y**2 > 0.00001):
             norm_body_x = body_dist_x / sqrt(body_dist_x**2 + body_dist_y**2)
             norm_body_y = body_dist_y / sqrt(body_dist_x**2 + body_dist_y**2)
         else:
@@ -257,8 +257,8 @@ class control:
         
         # tilt value is between -500~500
         tilt_value = max(-500,min(tilt_value,500))
-        x_tilt_value = 1000 -(norm_body_x*tilt_value)
-        y_tilt_value = 1000 -(norm_body_y*tilt_value)
+        x_tilt_value = 1000 -(norm_body_y*tilt_value)
+        y_tilt_value = 1000 -(norm_body_x*tilt_value)
 
         '''
         rospy.loginfo_throttle(1, "x: %d"%norm_body_x)

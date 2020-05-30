@@ -264,8 +264,8 @@ class control:
         
         # tilt value is between -500~500
         tilt_value = max(-500,min(tilt_value,500))
-        x_tilt_value = 1000 -(norm_body_x*tilt_value)
-        y_tilt_value = 1000 -(norm_body_y*tilt_value)
+        x_tilt_value = 1000 -(norm_body_y*tilt_value)
+        y_tilt_value = 1000 -(norm_body_x*tilt_value)
 
         ### PID loop for altitude value
         ######## error value used for throttle
@@ -277,7 +277,7 @@ class control:
 
         # Reach check
         d2_value = dist_x**2 + dist_y**2
-        if(self.reach_check(d2_value) and hoveringSW):
+        if(self.reach_check(d2_value) and not(hoveringSW)):
             self.auto_mode = False
 
         output = Ppm()
@@ -305,6 +305,8 @@ class control:
                 inout = self.inout_check()
                 if not inout:
                     self.auto_mode = True
+                else :
+                    self.auto_mode = False
             else:
                 inout = True
             rospy.loginfo_throttle(1, "inout: %d"%inout)
