@@ -108,7 +108,6 @@ class control:
         
     def hoveringSW_check(self):
         if 200 < self.input_RC.channel_7 < 700:
-            self.auto_mode = True
             return True
         else:
             return False

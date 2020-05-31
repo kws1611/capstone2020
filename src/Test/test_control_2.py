@@ -243,17 +243,12 @@ class control:
         return output
 
     def process(self):
-        if (self.gps_status is True) and (self.pose_status is True):
+        if (self.gps_status is True) and (self.pose_status is True) and (self.hoveringSW_check() is False):
             R_long = 6378137 # unit: meter
             R_short = 6356752 # unit: meter
             lat = self.curLat_rad
 
             self.earth_radius = sqrt(((R_long * cos(lat * pi/180))**2 + (R_short * sin(lat * pi/180))**2))
-
-            # Check channel 7 Switch
-            hoveringSW = self.hoveringSW_check()
-            if hoveringSW is True:
-                self.auto_mode = False
 
             # Safety area setting check
             # If the location of drone is in of range, inout = True
