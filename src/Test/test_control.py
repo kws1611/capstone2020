@@ -105,11 +105,7 @@ class control:
         self.areaDeltaLon_rad = (self.areaWidth - 2*self.areaRangeGap) / (self.earth_radius * cos(self.areaCenterLat_rad))
 
         return self.areaSet
-
-    def ppm_pub(self, output_RC):
-        output_RC.header.stamp = rospy.Time.now()
-        self.output_ppm_pub.publish(output_RC)
-
+        
     def hoveringSW_check(self):
         if 200 < self.input_RC.channel_7 < 700:
             self.auto_mode = True

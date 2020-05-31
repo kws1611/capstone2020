@@ -5,6 +5,6 @@
     <node name= "gps_node" pkg="capstone2020" type="gps_node.py" />
     <node name= "imu_node" pkg="capstone2020" type="imu.py" />
     <node name= "getting_node" pkg="capstone2020" type="getting.py" />
-    <node name= "control_node" pkg="capstone2020" type="control.py" output="screen" />
+    <node name= "control_node" pkg="capstone2020" type="control_2.py" output="screen" />
 
 </launch>

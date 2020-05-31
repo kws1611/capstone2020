@@ -6,6 +6,8 @@ from capstone2020.msg import GpsData, Ppm
 from capstone2020.srv import SetArea
 from math import sin, cos, pi, sqrt
 
+from sensor_msgs.msg import Imu
+
 class control:
     def __init__(self):
         # Set safety area variables
@@ -58,7 +60,7 @@ class control:
         self.output_ppm_pub = rospy.Publisher('/output_ppm', Ppm, queue_size= 1)
 
         rospy.Subscriber('/gps_data', GpsData, self.gps_cb)
-        rospy.Subscriber('/pose_covariance', PoseWithCovarianceStamped, self.imu_cb)
+        rospy.Subscriber('/mavros/imu/data', Imu, self.imu_cb)
         rospy.Subscriber('/input_ppm', Ppm, self.ppm_cb)
         
         rospy.Service('/set_area', SetArea, self.area_cb)
@@ -66,10 +68,10 @@ class control:
     def imu_cb(self, msg):
         self.pose_status = True
         
-        self.q = [msg.pose.pose.orientation.w,
-                msg.pose.pose.orientation.x,
-                msg.pose.pose.orientation.y,
-                msg.pose.pose.orientation.z]
+        self.q = [msg.orientation.w,
+                msg.orientation.x,
+                msg.orientation.y,
+                msg.orientation.z]
         
     # subscriber's callback function
     def gps_cb(self, msg):
@@ -103,7 +105,7 @@ class control:
         self.areaDeltaLon_rad = (self.areaWidth - 2*self.areaRangeGap) / (self.earth_radius * cos(self.areaCenterLat_rad))
 
         return self.areaSet
-        
+
     def hoveringSW_check(self):
         if 200 < self.input_RC.channel_7 < 700:
             return True
@@ -127,16 +129,7 @@ class control:
             else:
                 return False
 
-    def set_target(self, inout, hoveringSW):
-        # Hovering SW 
-        if (self.pre_hoveringSW == False) and (hoveringSW == True):
-            self.targetLat_rad = self.curLat_rad
-            self.targetLon_rad = self.curLon_rad
-            self.targetAlt = self.curAlt
-            self.targetThrottle = self.input_RC.channel_3
-
-            return
-
+    def set_target(self, inout):
         # When get out of safety area
         if (self.pre_inout == True) and (inout == False) and (self.pre_auto_mode == False) and (self.auto_mode == True):
             minLat = self.areaCenterLat_rad - self.areaDeltaLat_rad/2
@@ -232,7 +225,7 @@ class control:
         throttle_value = max(550, min(throttle_value, 1400))
 
         # Reach check
-        if(self.reach_check(d_xy) and (hoveringSW is False) and self.controller_check()):
+        if(self.reach_check(d_xy) and self.controller_check()):
             self.error_I = 0
             self.auto_mode = False
 
@@ -260,7 +253,7 @@ class control:
             # Check channel 7 Switch
             hoveringSW = self.hoveringSW_check()
             if hoveringSW is True:
-                self.auto_mode = True
+                self.auto_mode = False
 
             # Safety area setting check
             # If the location of drone is in of range, inout = True
@@ -282,11 +275,10 @@ class control:
         if self.auto_mode is False:
             self.output_RC = self.input_RC
         else:
-            self.set_target(inout, hoveringSW)
-            self.output_RC = self.auto_control(self.targetLat_rad, self.targetLon_rad, self.targetAlt, self.q, hoveringSW)
+            self.set_target(inout)
+            self.output_RC = self.auto_control(self.targetLat_rad, self.targetLon_rad, self.targetAlt, self.q)
 
             self.pre_inout = inout
-            self.pre_hoveringSW = hoveringSW
             self.pre_auto_mode == self.auto_mode 
 
         rospy.loginfo_throttle(1, "auto_mode: %d"%self.auto_mode)
@@ -308,7 +300,7 @@ def inv_quat(q):
     return [q[0], -q[1], -q[2], -q[3]]
 
 if __name__ == "__main__":
-    rospy.init_node('control_node')
+    rospy.init_node('test_control_node')
 
     drone = control()
 
