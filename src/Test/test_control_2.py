@@ -182,7 +182,7 @@ class control:
         d_xyz = sqrt(dist_x**2 + dist_y**2 + dist_z**2)
         d_xy = sqrt(dist_x**2 + dist_y**2)
 
-        body_dist = quat_mult([q[0], 0, 0, q[3]], quat_mult([0, dist_x, dist_y, dist_z], inv_quat([q[0], 0, 0, q[3]])))
+        body_dist = quat_mult(inv_quat([q[0], 0, 0, q[3]]), quat_mult([0, dist_x, dist_y, dist_z], [q[0], 0, 0, q[3]]))
         
         body_dist_x = body_dist[1]
         body_dist_y = body_dist[2]
