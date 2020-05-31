@@ -173,7 +173,7 @@ class control:
 
         return  (roll_neutrality and pitch_neutrality and throtle_neutrality)
         
-    def auto_control(self, targetLat_rad, targetLon_rad, targetAlt, q, hoveringSW):
+    def auto_control(self, targetLat_rad, targetLon_rad, targetAlt, q):
         ##################### dt has to be added##################################3
         dist_x = (self.earth_radius * (self.targetLat_rad - self.curLat_rad))
         dist_y = -(self.earth_radius * cos(self.curLat_rad) * (self.targetLon_rad - self.curLon_rad))
