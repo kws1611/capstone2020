@@ -7,6 +7,7 @@ import rospy
 import numpy as np
 from capstone2020.msg import Ppm
 from std_msgs.msg import String
+from std_msgs.msg import Float32
 
 class PWM_read:
     def __init__(self, pi):
@@ -26,6 +27,7 @@ class PWM_read:
         gpio = 18
         self._cb = pi.callback(gpio, pigpio.EITHER_EDGE, self._cbf)
         self.input_pub = rospy.Publisher("/input_ppm",Ppm,queue_size=1)
+        self.input_pub_2 = rospy.Publisher("/input_plot", Float32, queue_size=1)
 
     def _cbf(self, gpio, level, tick):
         if level == 1:
@@ -43,6 +45,7 @@ class PWM_read:
     def reading_process(self):
         #print("reading_proce")
         read_message = Ppm()
+        ploting = Float32()
         if self.first_switch:
             if self.ch[self.count] > 7000:
                 self.basic_ppm_signal_count = self.count
@@ -63,8 +66,13 @@ class PWM_read:
         read_message.channel_6 = self.ch_final[5]
         read_message.channel_7 = self.ch_final[6]
         read_message.channel_8 = self.ch_final[7]
+
+
+        ploting = self.ch_final[2]
+
         
         self.input_pub.publish(read_message)
+        self.input_pub_2.publish(ploting)
         self.rate.sleep()
     
     def cancel(self):
